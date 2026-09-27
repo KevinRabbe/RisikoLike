@@ -1,0 +1,20 @@
+# Godot 4+
+.godot/
+
+# Imported/generated files
+*.translation
+
+# Mono/.NET (future-proofing)
+.mono/
+data_*/
+
+# Builds
+build/
+builds/
+export/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
