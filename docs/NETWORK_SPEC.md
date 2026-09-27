@@ -1,8 +1,8 @@
 # RisikoLike — Lobby & Network Specification
 
 > **Status:** Pre-Production / Architektur  
-> **Dokumentversion:** 0.1  
-> **Bezug:** `docs/GDD.md`, `docs/MAP_SPEC.md`
+> **Dokumentversion:** 0.2  
+> **Bezug:** `docs/GDD.md`, `docs/MAP_SPEC.md`, `docs/BACKEND_SPEC.md`
 
 ## 1. Architekturziele
 
@@ -12,82 +12,67 @@
 - `FIX` Invite-Code statt manueller IP-Eingabe im normalen Nutzerfluss.
 - `FIX` Kein Account-Zwang für V1.
 - `FIX` Kein Dedicated Game Server für V1.
-- `FIX` Ein kleiner öffentlicher Rendezvous-/Lobby-Service ist für Invite-Codes zulässig.
+- `FIX` Ein kleiner öffentlicher Rendezvous-/Signaling-Service vermittelt Sessions.
 - `FIX` Das Ruleset wird vor Matchstart festgelegt und danach immutable.
 
-## 2. Empfohlene V1-Topologie
+## 2. V1-Technologieentscheidungen
+
+- `FIX` Godot 4.7.2 stable als initial festgeschriebene Engine-Version.
+- `FIX` Windows x86_64 als primäres V1-Target.
+- `FIX` GDScript für den Game Client.
+- `FIX` WebRTC als Internet-Game-Transport.
+- `FIX` HTTPS + WSS für Backend und Signaling.
+- `FIX` ICE/STUN für NAT-Traversal.
+- `FIX` TURN als Relay-Fallback.
+- `FIX` Kein manuelles Port-Forwarding im normalen Nutzerfluss.
+- `FIX` Host-authoritative Game Session.
+- `SPÄTER` Optional ENet/LAN/Direct Connect.
+
+Engine-Upgrades erfolgen bewusst und werden separat getestet; während einer Implementierungsphase wird nicht automatisch auf Preview-/Dev-Versionen gewechselt.
+
+## 3. Topologie
 
 ```text
-                   HTTPS
-+-------------+  <------->  +-----------------------+
-| Host Client |             | Rendezvous/Lobby API  |
-+------+------+             +-----------+-----------+
-       ^                                  ^
-       |                                  |
-       | Game Connection                  | HTTPS
-       |                                  |
-+------+------+                           |
-| Client A   |----------------------------+
-+------------+
+Host Godot Client
+   | HTTPS/WSS
+   v
+Rendezvous + Signaling Backend
+   ^
+   | HTTPS/WSS
+Guest Godot Client
 
-+------------+
-| Client B   |----------------------------+
-+------------+
+Host <------ WebRTC direct ------> Guest
+  oder
+Host <-------- TURN relay -------> Guest
 ```
 
-Der Rendezvous-Service verwaltet **nicht** den laufenden Game State. Seine Aufgaben sind ausschließlich Lobby-/Session-Vermittlung, Invite-Code-Auflösung und kurzlebige Session-Metadaten.
-
-## 3. Transportentscheidung
-
-### V1-Plan
-
-- `FIX` Godot High-Level Multiplayer API für die Game Session.
-- `KANDIDAT` `ENetMultiplayerPeer` als primärer nativer Windows-Transport.
-- `OFFEN` Wie Hosts ohne manuelles Port-Forwarding aus dem Internet erreichbar werden.
-- `OFFEN` Relay-/NAT-Traversal-Lösung.
-
-### Begründung
-
-ENet passt gut zum host-authoritativen Godot-Modell und unterstützt zuverlässige RPCs. Eine reine direkte ENet-Verbindung über das öffentliche Internet löst NAT/Router-Erreichbarkeit jedoch nicht automatisch. Deshalb ist die Erreichbarkeitsstrategie vor Implementierung des Invite-Systems zu entscheiden.
-
-### WebRTC-Alternative
-
-- `KANDIDAT` WebRTC mit Signaling + STUN/TURN.
-- Vorteil: NAT-Traversal ist Teil des Verbindungsmodells.
-- Nachteil: höhere Infrastruktur- und Implementierungskomplexität; native Godot-Plattformen benötigen je nach Godot-Version/Setup zusätzliche WebRTC-Unterstützung.
+Der Backend-Service verwaltet keinen autoritativen Game State.
 
 ## 4. Invite-Code Flow
 
-Vorgesehener Nutzerfluss:
-
 1. Host klickt `Lobby erstellen`.
-2. Spiel erzeugt eine kryptografisch zufällige `session_id` und ein Host-Session-Token.
-3. Client registriert die Lobby beim Rendezvous-Service.
-4. Service erzeugt einen kurzen Invite-Code.
-5. Host zeigt den Code an.
-6. Gast gibt den Code ein.
-7. Gast fragt den Code beim Rendezvous-Service ab.
-8. Service liefert ausschließlich die für den Verbindungsaufbau erforderlichen kurzlebigen Session-Daten.
-9. Gast baut die Game-Verbindung zum Host bzw. Relay auf.
-10. Host authentifiziert die Join-Anfrage.
+2. Backend registriert Lobby und erzeugt Lobby-ID, Invite-Code und Host-Token.
+3. Host verbindet sich mit dem Signaling-Service.
+4. Gast gibt Invite-Code ein.
+5. Backend löst Code auf und erzeugt kurzlebiges Join-Token.
+6. Gast verbindet sich mit Signaling.
+7. Offer/Answer und ICE-Candidates werden vermittelt.
+8. WebRTC versucht direkte Peer-Verbindung.
+9. Falls erforderlich wird TURN verwendet.
+10. Host authentifiziert den Game Join.
 11. Host sendet Lobby-State und Ruleset.
 12. Gast erscheint in der Lobby.
 
 ## 5. Invite-Code Format
 
-V1-Vorschlag:
-
-- Länge: `6` Zeichen
-- Alphabet: `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`
-- Keine leicht verwechselbaren Zeichen `0/O` und `1/I`.
-- Groß-/Kleinschreibung bei Eingabe ignorieren.
-- Darstellung optional als `ABC-123`.
-- Code ist nicht die Session-ID und kein Authentifizierungsgeheimnis.
-- Code wird beim Schließen der Lobby ungültig.
-- Code wird nach Matchstart nicht mehr für neue Spieler akzeptiert.
-- Kollisionsprüfung erfolgt serverseitig.
-
-Status des konkreten Formats: `CONFIG/FIX VOR IMPLEMENTIERUNG`.
+- `FIX` 6 Zeichen.
+- `FIX` Darstellung `ABC-123`.
+- `FIX` Alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`.
+- `FIX` Case-insensitive Eingabe.
+- `FIX` Invite-Code ist kein Authentifizierungsgeheimnis.
+- `FIX` Kollisionen werden serverseitig behandelt.
+- `FIX` Nach Lobby-Ende ungültig.
+- `FIX` Nach Matchstart keine normalen Late Joins.
 
 ## 6. Lobby State
 
@@ -105,19 +90,19 @@ LobbyState
   created_at
 ```
 
-### PlayerLobbyState
-
 ```text
-player_id
-network_peer_id
-session_token
-name
-color
-is_host
-is_ready
-connection_state
-spectator
+PlayerLobbyState
+  player_id
+  network_peer_id
+  name
+  color
+  is_host
+  is_ready
+  connection_state
+  spectator
 ```
+
+Session-/Reconnect-Tokens sind Security-Daten und gehören nicht in UI-Snapshots für andere Spieler.
 
 ## 7. Lobby-Zustände
 
@@ -140,36 +125,35 @@ STARTING -> CLOSED
 IN_GAME -> CLOSED
 ```
 
-Clients dürfen diese Zustände nicht autoritativ ändern.
+Nur Host/Backend gemäß Verantwortungsbereich dürfen autoritative Zustandswechsel auslösen.
 
 ## 8. Join-Validierung
 
-Der Host prüft vor Aufnahme eines Clients mindestens:
+Der Host prüft mindestens:
 
 - Lobby ist `OPEN`.
-- Match wurde noch nicht gestartet.
+- Match wurde nicht gestartet.
 - Lobby ist nicht voll.
-- Protokollversion kompatibel.
-- Spielversion kompatibel.
-- Join-Token/Session-Daten gültig.
-- Spielername erfüllt Längen-/Zeichenregeln.
-- angeforderte Farbe ist verfügbar oder wird neu zugeteilt.
+- Protokollversion ist kompatibel.
+- Spielversion ist kompatibel.
+- Join-/Session-Daten sind gültig.
+- Spielername erfüllt Regeln.
+- Farbe ist verfügbar oder wird neu zugeteilt.
 - Peer ist nicht bereits registriert.
 
 ## 9. Ready & Match Start
 
 - `CONFIG` Alle Nicht-Host-Spieler müssen standardmäßig Ready sein.
 - `CONFIG` Host muss standardmäßig nicht separat Ready drücken.
-- `FIX` Nur Host darf `Start Match` auslösen.
+- `FIX` Nur Host darf Matchstart auslösen.
 - `FIX` Mindestspielerzahl muss erreicht sein.
-- `FIX` Vor Start wird das Ruleset validiert.
-- `FIX` Beim Start wird das Ruleset eingefroren.
-- `FIX` Lobby nimmt danach keine normalen neuen Spieler mehr an.
-- `FIX` Host erzeugt initialen autoritativen Game State.
-- `FIX` Clients bestätigen, dass Game Scene und Initial State geladen wurden.
+- `FIX` Ruleset wird vor Start validiert und eingefroren.
+- `FIX` Danach keine normalen neuen Spieler.
+- `FIX` Host erzeugt initialen Game State.
+- `FIX` Clients bestätigen Scene + Initial State.
 - `FIX` Erst danach beginnt Zug 1.
 
-## 10. RPC-/Message-Gruppen
+## 10. Game Message Groups
 
 ### Client -> Host
 
@@ -207,7 +191,7 @@ Der Host prüft vor Aufnahme eines Clients mindestens:
 
 ## 11. Message Envelope
 
-Jede spielrelevante Aktion sollte logisch mindestens enthalten:
+Client-Aktion logisch:
 
 ```text
 protocol_version
@@ -219,7 +203,7 @@ expected_state_revision
 payload
 ```
 
-Host-Antworten enthalten:
+Host-Antwort:
 
 ```text
 action_id
@@ -228,141 +212,95 @@ new_state_revision
 result/error_code
 ```
 
-`action_id` verhindert, dass doppelt empfangene Requests doppelt ausgeführt werden. `expected_state_revision` ermöglicht die Ablehnung veralteter Aktionen.
+`action_id` schützt vor doppelter Ausführung. `expected_state_revision` schützt vor veralteten Aktionen.
 
 ## 12. State Revision
 
-- `FIX` Autoritativer Game State besitzt eine monoton steigende `state_revision`.
-- `FIX` Jede bestätigte zustandsverändernde Aktion erhöht die Revision.
-- `FIX` Clients senden ihre erwartete Revision bei Aktionen mit.
-- `FIX` Host darf veraltete oder inkonsistente Aktionen ablehnen.
-- `FIX` Bei Desync kann der Host einen vollständigen Snapshot senden.
+- `FIX` Game State besitzt monoton steigende `state_revision`.
+- `FIX` Jede bestätigte zustandsverändernde Aktion erhöht sie.
+- `FIX` Clients senden erwartete Revision mit.
+- `FIX` Host kann veraltete Aktionen ablehnen.
+- `FIX` Bei Desync sendet Host vollständigen Snapshot.
 
-## 13. Synchronisationsstrategie
+## 13. Synchronisation
 
-Für das rundenbasierte Spiel gilt:
-
-- Kritische Aktionen: zuverlässig und geordnet.
+- Kritische Game-Nachrichten zuverlässig und geordnet.
 - Keine kontinuierliche Positionsreplikation nötig.
-- UI-Hover, lokale Animationen und Cursor bleiben lokal.
-- Host sendet bestätigte Ergebnisse statt Client-Simulation als Wahrheit zu akzeptieren.
+- Hover, Animationen und Cursor bleiben lokal.
+- Host sendet bestätigte Resultate.
 - Vollständiger Snapshot bei Join/Reconnect/Desync.
-- Inkrementelle Events während des normalen Spiels.
+- Inkrementelle Events im normalen Spielbetrieb.
 
 ## 14. Reconnect
 
-- `FIX` Spieler besitzt ein kurzlebiges Reconnect-/Session-Token.
-- `FIX` Netzwerk-Peer-ID allein ist keine dauerhafte Spieleridentität.
-- `FIX` Reconnect ordnet eine neue Verbindung derselben logischen `player_id` zu.
+- `FIX` Spieler besitzt Reconnect-Token.
+- `FIX` Peer-ID ist keine dauerhafte Spieleridentität.
+- `FIX` Reconnect bindet neue Verbindung an bestehende `player_id`.
 - `CONFIG` Reconnect-Frist Default 3 Minuten.
-- `FIX` Host sendet nach erfolgreichem Reconnect einen vollständigen Game-State-Snapshot.
-- `FIX` Client verwirft lokalen spekulativen State und übernimmt den Host-Snapshot.
+- `FIX` Nach Reconnect vollständiger Host-Snapshot.
+- `FIX` Client verwirft spekulativen lokalen State.
 
 ## 15. Disconnect
 
 ### Client
 
-- Spieler wird `DISCONNECTED` markiert.
+- Spieler wird `DISCONNECTED`.
 - Territorien und Truppen bleiben bestehen.
 - Zugtimer läuft gemäß GDD weiter.
-- Reconnect innerhalb der Frist möglich.
-- Nach Ablauf wird Spieler als dauerhaft verlassen behandelt.
+- Reconnect innerhalb Frist möglich.
+- Nach Ablauf dauerhaft verlassen.
 
 ### Host
 
 - Partie pausiert.
 - Host erhält Reconnect-Frist.
-- Kommt Host zurück, wird Partie fortgesetzt.
-- Kommt Host in V1 nicht zurück, endet die Partie.
+- Rückkehr -> Partie fortsetzen.
+- Keine Rückkehr -> Partie endet in V1.
 - `SPÄTER` Host Migration.
 
 ## 16. Sicherheit
 
-- Invite-Code ist Convenience, kein Sicherheits-Token.
-- Session-/Reconnect-Tokens müssen ausreichend zufällig und nicht erratbar sein.
-- Clients dürfen keine Besitzer-, Truppen-, Karten- oder Würfelresultate autoritativ setzen.
-- Host validiert jeden Game Request gegen aktuellen State und Ruleset.
-- Netzwerkdaten gelten grundsätzlich als nicht vertrauenswürdig.
-- Payload-Größen begrenzen.
-- Strings/Längen validieren.
-- Unbekannte Message-/Action-Typen ablehnen.
-- Rate Limits für Rendezvous-API und Join-Versuche.
-- Keine öffentliche IP oder Session-Geheimnisse unnötig in Logs schreiben.
+- Invite-Code ist Convenience, kein Secret.
+- Tokens müssen kryptografisch zufällig sein.
+- Clients setzen niemals autoritativ Besitzer, Truppen, Karten, Würfel oder Gewinner.
+- Host validiert jede Game Action gegen State und Ruleset.
+- Netzwerkdaten gelten als nicht vertrauenswürdig.
+- Payload-Größen und Strings begrenzen.
+- Unbekannte Message-Typen ablehnen.
+- Rate Limits für Backend/Join-Versuche.
+- Keine Secrets unnötig loggen.
 
-## 17. Rendezvous API — logische Endpunkte
+## 17. Backend
 
-Technologie noch `OFFEN`; benötigte Semantik:
+Die detaillierte Backend-/Signaling-Spezifikation befindet sich in `docs/BACKEND_SPEC.md`.
 
-```text
-POST   /v1/lobbies
-POST   /v1/lobbies/{lobby_id}/heartbeat
-POST   /v1/lobbies/{lobby_id}/close
-POST   /v1/lobbies/resolve
-```
-
-### Create Lobby
-
-Input logisch:
+Logische REST-Endpunkte:
 
 ```text
-protocol_version
-game_version
-host_connection_metadata
+POST /v1/lobbies
+POST /v1/lobbies/{lobby_id}/heartbeat
+POST /v1/lobbies/{lobby_id}/close
+POST /v1/lobbies/resolve
+POST /v1/lobbies/{lobby_id}/turn-credentials
 ```
 
-Output logisch:
+Signaling erfolgt über WSS.
 
-```text
-lobby_id
-invite_code
-host_session_token
-expires_at
-```
-
-### Resolve Invite
-
-Input:
-
-```text
-invite_code
-game_version
-protocol_version
-```
-
-Output:
-
-```text
-lobby_id
-connection_metadata
-join_token
-expires_at
-```
-
-## 18. Lobby-Service Lebenszyklus
-
-- Host sendet Heartbeat.
-- Bleibt Heartbeat aus, läuft Lobby-Registrierung automatisch ab.
-- Host schließt Registrierung explizit beim normalen Lobby-Ende.
-- Service speichert keinen dauerhaften Matchverlauf für V1.
-- Service entscheidet nicht über Spielzüge.
-
-## 19. Versionierung
-
-Zwei getrennte Versionen:
+## 18. Versionierung
 
 ```text
 game_version
 protocol_version
+backend_api_version
 ```
 
-`game_version` ist die sichtbare Build-/Release-Version. `protocol_version` beschreibt Netzwerkkompatibilität.
+V1:
 
-V1-Regel:
+- Protocol mismatch -> Join ablehnen.
+- Erste Releases verwenden exakten Game-Version-Match.
+- Backend API beginnt mit `/v1`.
 
-- unterschiedliche inkompatible `protocol_version` -> Join ablehnen;
-- unterschiedliche `game_version` -> je nach Kompatibilitätsmatrix ablehnen; für erste V1 zunächst exakter Match empfohlen.
-
-## 20. Fehlercodes
+## 19. Fehlercodes
 
 Mindestens:
 
@@ -391,35 +329,30 @@ RATE_LIMITED
 INTERNAL_ERROR
 ```
 
-## 21. Noch zu entscheiden
+## 20. Noch zu entscheiden
 
-Vor Netzwerkimplementierung müssen diese Punkte geschlossen werden:
+1. `OFFEN` Backend-Sprache/Framework.
+2. `OFFEN` Hosting-Anbieter.
+3. `OFFEN` STUN/TURN-Provider bzw. Eigenbetrieb.
+4. `OFFEN` Redis ja/nein für Produktion.
+5. `OFFEN` konkrete RPC-/Payload-Schemas nach Godot-Architektur.
+6. `OFFEN` native WebRTC-Integration/GDExtension exakt auswählen und versionieren.
 
-1. `OFFEN` Godot-Version exakt festlegen.
-2. `OFFEN` ENet direkt, WebRTC oder Relay-basierte Lösung als finaler Game Transport.
-3. `OFFEN` NAT-Traversal/Relay-Provider bzw. Eigenbetrieb.
-4. `OFFEN` Technologie und Hosting des Rendezvous-Service.
-5. `OFFEN` finale Invite-Code-Länge und Alphabet.
-6. `OFFEN` Heartbeat-Intervall und Lobby-TTL.
-7. `OFFEN` Token-Lebensdauer.
-8. `OFFEN` maximale Spielername-Länge und erlaubte Zeichen.
-9. `OFFEN` Farbkonflikt-Verhalten.
-10. `OFFEN` genaue RPC-Namen und Payload-Schemas nach Festlegung der Godot-Architektur.
+## 21. Definition of Done — Networking V1
 
-## 22. Definition of Done — Networking V1
-
-- Host kann eine Lobby erstellen.
+- Host kann Lobby erstellen.
 - Invite-Code wird erzeugt und angezeigt.
-- Zweiter PC kann ausschließlich mit dem Invite-Code beitreten.
-- Kein manuelles Eingeben einer IP-Adresse erforderlich.
-- Bis zu 5 Spieler können dieselbe Lobby betreten.
-- Lobby-State bleibt bei allen Peers synchron.
-- Nur Host kann Match starten.
-- Ruleset wird beim Start eingefroren.
-- Alle spielrelevanten Aktionen werden vom Host validiert.
+- Zweiter PC kann nur mit Invite-Code beitreten.
+- Keine IP-Eingabe/Portfreigabe nötig.
+- Bis zu 5 Spieler können Lobby betreten.
+- Lobby-State bleibt synchron.
+- Nur Host startet Match.
+- Ruleset wird eingefroren.
+- Host validiert alle Game Actions.
 - Doppelte/veraltete Aktionen verändern State nicht doppelt.
 - Disconnect wird erkannt.
-- Client kann innerhalb der Frist reconnecten.
-- Reconnect erhält einen vollständigen korrekten State.
-- Ungültige/incompatible Clients erhalten einen definierten Fehler.
-- Host-Verlust wird entsprechend der V1-Regel behandelt.
+- Client kann innerhalb Frist reconnecten.
+- Reconnect erhält vollständigen State.
+- Inkompatible Clients erhalten definierten Fehler.
+- TURN-Fallback wurde real über getrennte Internetanschlüsse getestet.
+- Host-Verlust wird gemäß V1-Regel behandelt.
