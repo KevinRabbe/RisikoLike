@@ -21,14 +21,21 @@ var winner_player_id: String = ""
 var last_result: Dictionary = {}
 
 static func create_local(player_count: int, seed_value: int = 12345, p_ruleset: Ruleset = null) -> GameState:
+	var player_ids: Array[String] = []
+	for index in range(player_count):
+		player_ids.append("P%d" % (index + 1))
+	return create_local_for_player_ids(player_ids, seed_value, p_ruleset)
+
+static func create_local_for_player_ids(player_ids: Array[String], seed_value: int = 12345, p_ruleset: Ruleset = null) -> GameState:
 	var game := GameState.new()
 	game.ruleset = p_ruleset.duplicate_ruleset() if p_ruleset != null else Ruleset.new()
 	game.map_data = MapDataFactory.create_default()
 	game.status = MatchStatus.STARTING_SETUP
 	var random := RandomSource.new(seed_value)
 	var colors := [Color("#e45756"), Color("#4f86c6"), Color("#5cb85c"), Color("#f0ad4e"), Color("#9b59b6")]
+	var player_count := player_ids.size()
 	for index in range(player_count):
-		var player_id := "P%d" % (index + 1)
+		var player_id: String = player_ids[index]
 		game.players[player_id] = PlayerState.new(player_id, "Spieler %d" % (index + 1), colors[index])
 	for territory_id: String in game.map_data.territories:
 		game.territories[territory_id] = TerritoryState.new(territory_id)
@@ -37,7 +44,7 @@ static func create_local(player_count: int, seed_value: int = 12345, p_ruleset: 
 		territory_ids.append(territory_id)
 	random.shuffle(territory_ids)
 	for index in range(territory_ids.size()):
-		var player_id := "P%d" % ((index % player_count) + 1)
+		var player_id: String = player_ids[index % player_count]
 		game.territories[territory_ids[index]].owner_player_id = player_id
 		game.territories[territory_ids[index]].army_count = 1
 	var remaining_by_player := {}

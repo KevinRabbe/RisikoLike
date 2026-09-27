@@ -8,6 +8,7 @@ var name: String
 var color: Color
 var status: Status = Status.ACTIVE
 var territory_card_ids: Array[String] = []
+var visible_card_count: int = 0
 var reinforcements_remaining: int = 0
 var has_conquered_this_turn: bool = false
 var card_drawn_this_turn: bool = false
