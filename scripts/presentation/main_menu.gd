@@ -12,7 +12,7 @@ func _on_join_lobby_pressed() -> void:
 	print("[APP] Join Lobby not implemented yet")
 
 func _on_settings_pressed() -> void:
-	print("[APP] Settings screen not implemented yet")
+	SceneRouter.go_to_settings()
 
 func _on_exit_pressed() -> void:
 	get_tree().quit()
