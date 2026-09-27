@@ -138,14 +138,16 @@ func _test_combat_and_conquest() -> void:
 func _test_fortification() -> void:
 	var game := GameState.create_local(2, 40)
 	var player_id := game.turn_state.active_player_id
+	var enemy_id := "P2" if player_id == "P1" else "P1"
 	var source := game.get_territory("NA_01")
 	var middle := game.get_territory("NA_02")
 	var target := game.get_territory("NA_03")
 	for territory: TerritoryState in game.territories.values():
-		territory.owner_player_id = player_id
+		territory.owner_player_id = enemy_id
 		territory.army_count = 1
+	source.owner_player_id = player_id
 	source.army_count = 5
-	middle.owner_player_id = "P2" if player_id == "P1" else "P1"
+	target.owner_player_id = player_id
 	target.army_count = 1
 	game.turn_state.phase = TurnState.Phase.FORTIFICATION
 	var manager := FortificationManager.new(game)

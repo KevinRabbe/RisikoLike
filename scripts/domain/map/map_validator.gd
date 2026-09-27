@@ -86,7 +86,7 @@ static func _is_connected(map_data: MapData, ids, _region_id: String) -> bool:
 	var visited := {}
 	var queue: Array[String] = [str(ids[0])]
 	while not queue.is_empty():
-		var current := queue.pop_front()
+		var current: String = queue.pop_front()
 		if visited.has(current):
 			continue
 		visited[current] = true

@@ -26,7 +26,7 @@ func execute(command: CommandEnvelope) -> CommandResult:
 	if envelope_error != "":
 		return _reject(envelope_error)
 	var result: Dictionary
-	switch command.command_type:
+	match command.command_type:
 		"place_reinforcement":
 			result = reinforcement_manager.place(command.player_id, str(command.payload.get("territory_id", "")), int(command.payload.get("amount", 0)))
 		"reset_reinforcements":
