@@ -106,6 +106,8 @@ func _end_phase(player_id: String) -> Dictionary:
 				return {"accepted": false, "code": "CONQUEST_MOVE_REQUIRED"}
 			if game_state.forced_trade_player_id == player_id:
 				return {"accepted": false, "code": "FORCED_TRADE_REQUIRED"}
+			if game_state.get_player(player_id).pending_trade_reinforcements > 0:
+				return {"accepted": false, "code": "TRADE_REINFORCEMENTS_REMAINING"}
 			return _transition_to(player_id, TurnState.Phase.FORTIFICATION)
 		TurnState.Phase.FORTIFICATION:
 			return _transition_to(player_id, TurnState.Phase.TURN_END)

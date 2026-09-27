@@ -34,7 +34,8 @@ func begin_phase(player_id: String) -> int:
 	return amount
 
 func place(player_id: String, territory_id: String, amount: int) -> Dictionary:
-	if game_state.turn_state.phase != TurnState.Phase.REINFORCEMENT:
+	var is_attack_trade_placement := game_state.turn_state.phase == TurnState.Phase.ATTACK and game_state.get_player(player_id) != null and game_state.get_player(player_id).pending_trade_reinforcements > 0
+	if game_state.turn_state.phase != TurnState.Phase.REINFORCEMENT and not is_attack_trade_placement:
 		return {"accepted": false, "code": "INVALID_PHASE"}
 	if game_state.turn_state.active_player_id != player_id:
 		return {"accepted": false, "code": "NOT_YOUR_TURN"}
@@ -43,10 +44,14 @@ func place(player_id: String, territory_id: String, amount: int) -> Dictionary:
 		return {"accepted": false, "code": "INVALID_TERRITORY"}
 	if territory.owner_player_id != player_id:
 		return {"accepted": false, "code": "NOT_OWNER"}
-	if amount <= 0 or amount > game_state.get_player(player_id).reinforcements_remaining:
+	var available := game_state.get_player(player_id).reinforcements_remaining if game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT else game_state.get_player(player_id).pending_trade_reinforcements
+	if amount <= 0 or amount > available:
 		return {"accepted": false, "code": "INVALID_REINFORCEMENT_AMOUNT"}
 	territory.army_count += amount
-	game_state.get_player(player_id).reinforcements_remaining -= amount
+	if game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT:
+		game_state.get_player(player_id).reinforcements_remaining -= amount
+	else:
+		game_state.get_player(player_id).pending_trade_reinforcements -= amount
 	game_state.pending_reinforcements[territory_id] = int(game_state.pending_reinforcements.get(territory_id, 0)) + amount
 	return {"accepted": true, "code": "OK", "territory_id": territory_id, "amount": amount}
 

@@ -135,10 +135,11 @@ func _on_territory_selected(territory_id: String) -> void:
 	if game_state.status == GameState.MatchStatus.FINISHED:
 		return
 	var phase := game_state.turn_state.phase
-	if phase == TurnState.Phase.REINFORCEMENT:
+	if phase == TurnState.Phase.REINFORCEMENT or (phase == TurnState.Phase.ATTACK and game_state.get_player(game_state.turn_state.active_player_id).pending_trade_reinforcements > 0):
 		source_id = territory_id
 		target_id = ""
-		amount_spin.max_value = maxi(1, game_state.get_player(game_state.turn_state.active_player_id).reinforcements_remaining)
+		var available := game_state.get_player(game_state.turn_state.active_player_id).reinforcements_remaining if phase == TurnState.Phase.REINFORCEMENT else game_state.get_player(game_state.turn_state.active_player_id).pending_trade_reinforcements
+		amount_spin.max_value = maxi(1, available)
 		amount_spin.value = 1
 	elif phase == TurnState.Phase.ATTACK or phase == TurnState.Phase.FORTIFICATION:
 		if source_id.is_empty() or (not target_id.is_empty()):
@@ -155,7 +156,9 @@ func _on_primary_action_pressed() -> void:
 		TurnState.Phase.REINFORCEMENT:
 			command = PlaceReinforcementCommand.create(player_id, game_state.state_revision, source_id, int(amount_spin.value))
 		TurnState.Phase.ATTACK:
-			if not game_state.pending_conquest.is_empty():
+			if game_state.get_player(player_id).pending_trade_reinforcements > 0:
+				command = PlaceReinforcementCommand.create(player_id, game_state.state_revision, source_id, int(amount_spin.value))
+			elif not game_state.pending_conquest.is_empty():
 				command = CommandEnvelope.create(player_id, game_state.state_revision, "conquest_move", {"amount": int(amount_spin.value)})
 			else:
 				command = CommandEnvelope.create(player_id, game_state.state_revision, "attack", {"source_id": source_id, "target_id": target_id, "attacker_dice": int(attacker_dice_spin.value), "defender_dice": int(defender_dice_spin.value)})

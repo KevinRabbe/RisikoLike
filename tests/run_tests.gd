@@ -203,6 +203,24 @@ func _test_cards() -> void:
 	forced_player.territory_card_ids = five_cards
 	var forced_end := forced_processor.execute(CommandEnvelope.new("forced-end", forced_player_id, forced_game.state_revision, "end_phase"))
 	_expect_equal(forced_end.code, "FORCED_TRADE_REQUIRED", "forced trade threshold enforced")
+	var forced_infantry: Array[String] = []
+	for card: CardState in forced_game.deck_state.cards.values():
+		if card.symbol == CardState.Symbol.INFANTRY:
+			forced_infantry.append(card.card_id)
+		if forced_infantry.size() == 3:
+			break
+	forced_player.territory_card_ids = forced_infantry.duplicate()
+	forced_player.territory_card_ids.append("JOKER_1")
+	forced_player.territory_card_ids.append("JOKER_2")
+	forced_game.turn_state.phase = TurnState.Phase.ATTACK
+	forced_game.forced_trade_player_id = forced_player_id
+	var immediate_trade := forced_processor.execute(CommandEnvelope.new("immediate-trade", forced_player_id, forced_game.state_revision, "trade_cards", {"card_ids": forced_infantry}))
+	_expect(immediate_trade.accepted, "elimination trade accepted during attack")
+	_expect_equal(forced_player.pending_trade_reinforcements, 4, "attack trade creates immediate placement pool")
+	var forced_territory := forced_game.owned_territories(forced_player_id)[0]
+	var immediate_place := forced_processor.execute(PlaceReinforcementCommand.create(forced_player_id, forced_game.state_revision, forced_territory.territory_id, 4))
+	_expect(immediate_place.accepted, "attack trade reinforcements can be placed immediately")
+	_expect_equal(forced_player.pending_trade_reinforcements, 0, "immediate trade placement pool is consumed")
 	var reshuffle_game := GameState.create_local(2, 52)
 	var reshuffle_processor := CommandProcessor.new(reshuffle_game, RandomSource.new(52))
 	var reshuffle_player_id := reshuffle_game.turn_state.active_player_id
