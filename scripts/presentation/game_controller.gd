@@ -19,11 +19,20 @@ var trade_button: Button
 var player_panel: VBoxContainer
 var source_id := ""
 var target_id := ""
+var network_mode := false
+var local_player_id := ""
 
 func _ready() -> void:
-	var player_count := int(get_tree().get_meta("local_player_count", 2))
-	game_state = GameState.create_local(clampi(player_count, 2, 5), 424242)
-	processor = CommandProcessor.new(game_state, RandomSource.new(424242))
+	if NetworkManager.has_active_match():
+		network_mode = true
+		local_player_id = NetworkManager.local_player_id
+		game_state = NetworkManager.game_state
+		NetworkManager.command_result_received.connect(_on_network_command_result)
+		NetworkManager.state_snapshot_changed.connect(_on_network_snapshot_changed)
+	else:
+		var player_count := int(get_tree().get_meta("local_player_count", 2))
+		game_state = GameState.create_local(clampi(player_count, 2, 5), 424242)
+		processor = CommandProcessor.new(game_state, RandomSource.new(424242))
 	_build_ui()
 	_refresh_ui()
 
@@ -134,6 +143,9 @@ func _build_ui() -> void:
 func _on_territory_selected(territory_id: String) -> void:
 	if game_state.status == GameState.MatchStatus.FINISHED:
 		return
+	if network_mode and game_state.turn_state.active_player_id != local_player_id:
+		result_label.text = "Du bist nicht am Zug."
+		return
 	var phase := game_state.turn_state.phase
 	if phase == TurnState.Phase.REINFORCEMENT or (phase == TurnState.Phase.ATTACK and game_state.get_player(game_state.turn_state.active_player_id).pending_trade_reinforcements > 0):
 		source_id = territory_id
@@ -150,9 +162,11 @@ func _on_territory_selected(territory_id: String) -> void:
 	selection_label.text = "Auswahl: %s -> %s" % [source_id if not source_id.is_empty() else "—", target_id if not target_id.is_empty() else "—"]
 
 func _on_primary_action_pressed() -> void:
-	var player_id := game_state.turn_state.active_player_id
+	var player_id := _command_player_id()
+	if player_id.is_empty():
+		return
 	var command: CommandEnvelope
-	switch game_state.turn_state.phase:
+	match game_state.turn_state.phase:
 		TurnState.Phase.REINFORCEMENT:
 			command = PlaceReinforcementCommand.create(player_id, game_state.state_revision, source_id, int(amount_spin.value))
 		TurnState.Phase.ATTACK:
@@ -170,10 +184,12 @@ func _on_primary_action_pressed() -> void:
 	_execute(command)
 
 func _on_reset_pressed() -> void:
-	_execute(CommandEnvelope.create(game_state.turn_state.active_player_id, game_state.state_revision, "reset_reinforcements"))
+	_execute(CommandEnvelope.create(_command_player_id(), game_state.state_revision, "reset_reinforcements"))
 
 func _on_trade_pressed() -> void:
-	var player := game_state.get_player(game_state.turn_state.active_player_id)
+	var player := game_state.get_player(_command_player_id())
+	if player == null:
+		return
 	var card_ids := _find_valid_card_set(player.territory_card_ids)
 	if card_ids.is_empty():
 		result_label.text = "Kein gültiges Kartenset gefunden."
@@ -181,8 +197,11 @@ func _on_trade_pressed() -> void:
 	_execute(CommandEnvelope.create(player.player_id, game_state.state_revision, "trade_cards", {"card_ids": card_ids}))
 
 func _on_end_phase_pressed() -> void:
+	var player_id := _command_player_id()
+	if player_id.is_empty():
+		return
 	var command_type := "confirm_reinforcements" if game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT else "end_phase"
-	_execute(CommandEnvelope.create(game_state.turn_state.active_player_id, game_state.state_revision, command_type))
+	_execute(CommandEnvelope.create(player_id, game_state.state_revision, command_type))
 
 func _on_zoom_in_pressed() -> void:
 	map_controller.zoom_in()
@@ -194,12 +213,20 @@ func _on_zoom_reset_pressed() -> void:
 	map_controller.reset_view()
 
 func _on_end_turn_pressed() -> void:
-	_execute(CommandEnvelope.create(game_state.turn_state.active_player_id, game_state.state_revision, "end_turn"))
+	_execute(CommandEnvelope.create(_command_player_id(), game_state.state_revision, "end_turn"))
 
 func _on_surrender_pressed() -> void:
-	_execute(CommandEnvelope.create(game_state.turn_state.active_player_id, game_state.state_revision, "surrender"))
+	_execute(CommandEnvelope.create(_command_player_id(), game_state.state_revision, "surrender"))
 
 func _execute(command: CommandEnvelope) -> void:
+	if command == null or command.player_id.is_empty():
+		return
+	if network_mode:
+		var queued := NetworkManager.submit_command(command)
+		if not bool(queued.get("ok", false)):
+			result_label.text = "Abgelehnt: %s" % queued.get("code", "NETWORK_ERROR")
+		_refresh_ui()
+		return
 	var result := processor.execute(command)
 	if result.accepted:
 		result_label.text = "OK: %s" % result.data.get("code", "OK")
@@ -209,35 +236,53 @@ func _execute(command: CommandEnvelope) -> void:
 		result_label.text = "Abgelehnt: %s" % result.code
 	_refresh_ui()
 
+func _on_network_command_result(result: CommandResult) -> void:
+	if result.accepted:
+		result_label.text = "Host bestätigt: %s" % result.code
+		source_id = ""
+		target_id = ""
+	else:
+		result_label.text = "Host lehnt ab: %s" % result.code
+	_refresh_ui()
+
+func _on_network_snapshot_changed(_snapshot: GameStateSnapshot) -> void:
+	game_state = NetworkManager.game_state
+	_refresh_ui()
+
 func _refresh_ui() -> void:
 	if map_controller != null:
 		if map_controller.grid == null:
 			map_controller.configure(game_state.map_data, game_state)
 		else:
 			map_controller.refresh()
-	var player := game_state.get_player(game_state.turn_state.active_player_id)
+	var active_player := game_state.get_player(game_state.turn_state.active_player_id)
+	var visible_player := game_state.get_player(_command_player_id()) if not _command_player_id().is_empty() else active_player
 	phase_label.text = "Phase: %s | Runde %d | Revision %d" % [game_state.turn_state.phase_name(), game_state.turn_state.round_number, game_state.state_revision]
-	player_label.text = "Am Zug: %s" % player.name
-	reinforcement_label.text = "Verstärkungen: %d | Karten: %d" % [player.reinforcements_remaining, player.territory_card_ids.size()]
+	player_label.text = "Am Zug: %s%s" % [active_player.name, " | Du: %s" % visible_player.name if network_mode and visible_player != null else ""]
+	reinforcement_label.text = "Eigene Verstärkungen: %d | Eigene Karten: %d" % [visible_player.reinforcements_remaining if visible_player != null else 0, visible_player.territory_card_ids.size() if visible_player != null else 0]
 	for child in player_panel.get_children():
 		child.queue_free()
 	for player_id: String in game_state.players:
 		var listed_player := game_state.get_player(player_id)
 		var player_row := Label.new()
-		player_row.text = "%s  | Gebiete: %d  | Karten: %d%s" % [listed_player.name, listed_player.territory_count(game_state), listed_player.territory_card_ids.size(), "  ← am Zug" if player_id == game_state.turn_state.active_player_id else ""]
+		var card_count := listed_player.territory_card_ids.size() if not network_mode or player_id == local_player_id else listed_player.visible_card_count
+		player_row.text = "%s  | Gebiete: %d  | Karten: %d%s" % [listed_player.name, listed_player.territory_count(game_state), card_count, "  ← am Zug" if player_id == game_state.turn_state.active_player_id else ""]
 		player_panel.add_child(player_row)
 	selection_label.text = "Auswahl: %s -> %s" % [source_id if not source_id.is_empty() else "—", target_id if not target_id.is_empty() else "—"]
 	var reinforcement_phase := game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT
 	reset_button.visible = reinforcement_phase
 	trade_button.visible = game_state.turn_state.phase == TurnState.Phase.CARD_TRADE or game_state.forced_trade_player_id == game_state.turn_state.active_player_id
-	primary_action.visible = game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT or game_state.turn_state.phase == TurnState.Phase.ATTACK or game_state.turn_state.phase == TurnState.Phase.FORTIFICATION
-	end_phase_button.visible = game_state.turn_state.phase != TurnState.Phase.TURN_END and game_state.status == GameState.MatchStatus.PLAYING
+	var can_act := not network_mode or game_state.turn_state.active_player_id == local_player_id
+	primary_action.visible = can_act and (game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT or game_state.turn_state.phase == TurnState.Phase.ATTACK or game_state.turn_state.phase == TurnState.Phase.FORTIFICATION)
+	end_phase_button.visible = can_act and game_state.turn_state.phase != TurnState.Phase.TURN_END and game_state.status == GameState.MatchStatus.PLAYING
 	end_phase_button.text = "Verstärkungen bestätigen" if reinforcement_phase else "Phase beenden"
-	end_turn_button.visible = game_state.turn_state.phase == TurnState.Phase.TURN_END
+	end_turn_button.visible = can_act and game_state.turn_state.phase == TurnState.Phase.TURN_END
 	if game_state.status == GameState.MatchStatus.FINISHED:
 		result_label.text = "Sieg: %s" % game_state.get_player(game_state.winner_player_id).name
 
 func _find_valid_card_set(card_ids: Array[String]) -> Array[String]:
+	if network_mode:
+		return NetworkManager.find_valid_card_set(card_ids)
 	for first in range(card_ids.size()):
 		for second in range(first + 1, card_ids.size()):
 			for third in range(second + 1, card_ids.size()):
@@ -245,3 +290,10 @@ func _find_valid_card_set(card_ids: Array[String]) -> Array[String]:
 				if processor.card_manager.is_valid_set(candidate):
 					return candidate
 	return []
+
+func _command_player_id() -> String:
+	if network_mode:
+		if game_state == null or game_state.turn_state.active_player_id != local_player_id:
+			return ""
+		return local_player_id
+	return game_state.turn_state.active_player_id if game_state != null else ""

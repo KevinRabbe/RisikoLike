@@ -229,6 +229,8 @@ Das komplette Spiel ist auf einem PC ohne Netzwerk spielbar.
 
 # M5 — Local Multiplayer Transport Prototype
 
+> **Status:** Abgeschlossen — lokaler TCP-Transport, Host-Authority, Snapshots, Privacy-Filter, Recovery und Zwei-Prozess-Smoke-Test validiert.
+
 ## Ziel
 
 Zwei Godot-Instanzen kommunizieren über die gleiche Message-/Command-Schicht, die später Internet-WebRTC nutzt.
@@ -269,6 +271,8 @@ State Hash/Revision ist nach Aktionen auf Host und Client identisch.
 ---
 
 # M6 — Lobby Local Prototype
+
+> **Status:** Abgeschlossen — Create/Join/Lobby, Ready, Ruleset-Sync, Matchstart, Leave und Host-Close validiert.
 
 ## Ziel
 

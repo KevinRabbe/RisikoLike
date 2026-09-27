@@ -3,6 +3,9 @@ extends Node
 const MAIN_MENU := "res://scenes/menu/MainMenu.tscn"
 const SETTINGS := "res://scenes/menu/Settings.tscn"
 const LOCAL_SETUP := "res://scenes/menu/LocalSetup.tscn"
+const CREATE_LOBBY := "res://scenes/menu/CreateLobby.tscn"
+const JOIN_LOBBY := "res://scenes/menu/JoinLobby.tscn"
+const LOBBY := "res://scenes/menu/Lobby.tscn"
 const GAME := "res://scenes/game/Game.tscn"
 
 func go_to_main_menu() -> void:
@@ -13,6 +16,15 @@ func go_to_settings() -> void:
 
 func go_to_local_setup() -> void:
 	change_scene(LOCAL_SETUP)
+
+func go_to_create_lobby() -> void:
+	change_scene(CREATE_LOBBY)
+
+func go_to_join_lobby() -> void:
+	change_scene(JOIN_LOBBY)
+
+func go_to_lobby() -> void:
+	change_scene(LOBBY)
 
 func go_to_game() -> void:
 	change_scene(GAME)
