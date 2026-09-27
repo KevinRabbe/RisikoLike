@@ -13,6 +13,7 @@ var territories: Dictionary = {}
 var turn_state := TurnState.new()
 var deck_state := DeckState.new()
 var combat_state := CombatState.new()
+var pending_reinforcements: Dictionary = {}
 var pending_conquest: Dictionary = {}
 var forced_trade_player_id: String = ""
 var last_action_id: String = ""

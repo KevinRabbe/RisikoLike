@@ -70,6 +70,8 @@ func _validate_envelope(command: CommandEnvelope) -> String:
 		return "INVALID_PLAYER"
 	if not game_state.get_player(command.player_id).can_take_turn():
 		return "PLAYER_NOT_ACTIVE"
+	if command.command_type != "surrender" and game_state.turn_state.active_player_id != command.player_id:
+		return "NOT_YOUR_TURN"
 	return ""
 
 func _trade_cards(command: CommandEnvelope) -> Dictionary:
@@ -96,6 +98,8 @@ func _end_phase(player_id: String) -> Dictionary:
 				return {"accepted": false, "code": "FORCED_TRADE_REQUIRED"}
 			return _enter_reinforcement(player_id)
 		TurnState.Phase.REINFORCEMENT:
+			if game_state.get_player(player_id).reinforcements_remaining != 0:
+				return {"accepted": false, "code": "REINFORCEMENTS_REMAINING"}
 			return _transition_to(player_id, TurnState.Phase.ATTACK)
 		TurnState.Phase.ATTACK:
 			if not game_state.pending_conquest.is_empty():
@@ -134,7 +138,7 @@ func _enter_reinforcement(player_id: String) -> Dictionary:
 	var amount := reinforcement_manager.begin_phase(player_id)
 	return {"accepted": true, "code": "OK", "phase": "REINFORCEMENT", "amount": amount}
 
-func _transition_to(player_id: String, phase: TurnState.Phase) -> Dictionary:
+func _transition_to(player_id: String, phase: int) -> Dictionary:
 	if game_state.turn_state.active_player_id != player_id:
 		return {"accepted": false, "code": "NOT_YOUR_TURN"}
 	if not game_state.turn_state.transition_to(phase):

@@ -54,8 +54,14 @@ static func validate(map_data: MapData) -> PackedStringArray:
 	for region_id: String in EXPECTED_REGION_COUNTS:
 		if not map_data.regions.has(region_id):
 			errors.append("missing region %s" % region_id)
-		elif int(region_counts.get(region_id, 0)) != EXPECTED_REGION_COUNTS[region_id]:
-			errors.append("region %s has %d territories, expected %d" % [region_id, int(region_counts.get(region_id, 0)), EXPECTED_REGION_COUNTS[region_id]])
+		else:
+			var region := map_data.get_region(region_id)
+			if region.expected_territory_count != EXPECTED_REGION_COUNTS[region_id]:
+				errors.append("region %s declares %d territories, expected %d" % [region_id, region.expected_territory_count, EXPECTED_REGION_COUNTS[region_id]])
+			if region.bonus < 0:
+				errors.append("region %s has a negative bonus" % region_id)
+			if int(region_counts.get(region_id, 0)) != EXPECTED_REGION_COUNTS[region_id]:
+				errors.append("region %s has %d territories, expected %d" % [region_id, int(region_counts.get(region_id, 0)), EXPECTED_REGION_COUNTS[region_id]])
 	for symbol: String in VALID_SYMBOLS:
 		if int(symbol_counts[symbol]) != 14:
 			errors.append("symbol %s has %d cards, expected 14" % [symbol, int(symbol_counts[symbol])])

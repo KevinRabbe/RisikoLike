@@ -16,6 +16,7 @@ var end_phase_button: Button
 var end_turn_button: Button
 var reset_button: Button
 var trade_button: Button
+var player_panel: VBoxContainer
 var source_id := ""
 var target_id := ""
 
@@ -56,6 +57,12 @@ func _build_ui() -> void:
 	title.text = "Lokale Partie"
 	title.add_theme_font_size_override("font_size", 24)
 	side.add_child(title)
+	var players_title := Label.new()
+	players_title.text = "Spielerübersicht"
+	players_title.add_theme_font_size_override("font_size", 18)
+	side.add_child(players_title)
+	player_panel = VBoxContainer.new()
+	side.add_child(player_panel)
 	reinforcement_label = Label.new()
 	side.add_child(reinforcement_label)
 	selection_label = Label.new()
@@ -105,6 +112,20 @@ func _build_ui() -> void:
 	result_label = Label.new()
 	result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	side.add_child(result_label)
+	var zoom_row := HBoxContainer.new()
+	var zoom_out_button := Button.new()
+	zoom_out_button.text = "Karte −"
+	zoom_out_button.pressed.connect(_on_zoom_out_pressed)
+	zoom_row.add_child(zoom_out_button)
+	var zoom_reset_button := Button.new()
+	zoom_reset_button.text = "Ansicht zurücksetzen"
+	zoom_reset_button.pressed.connect(_on_zoom_reset_pressed)
+	zoom_row.add_child(zoom_reset_button)
+	var zoom_in_button := Button.new()
+	zoom_in_button.text = "Karte +"
+	zoom_in_button.pressed.connect(_on_zoom_in_pressed)
+	zoom_row.add_child(zoom_in_button)
+	side.add_child(zoom_row)
 	var hint := Label.new()
 	hint.text = "Gebiet anklicken: Verstärken = Gebiet, Angriff/Fortification = Quelle dann Ziel."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -157,7 +178,17 @@ func _on_trade_pressed() -> void:
 	_execute(CommandEnvelope.create(player.player_id, game_state.state_revision, "trade_cards", {"card_ids": card_ids}))
 
 func _on_end_phase_pressed() -> void:
-	_execute(CommandEnvelope.create(game_state.turn_state.active_player_id, game_state.state_revision, "end_phase"))
+	var command_type := "confirm_reinforcements" if game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT else "end_phase"
+	_execute(CommandEnvelope.create(game_state.turn_state.active_player_id, game_state.state_revision, command_type))
+
+func _on_zoom_in_pressed() -> void:
+	map_controller.zoom_in()
+
+func _on_zoom_out_pressed() -> void:
+	map_controller.zoom_out()
+
+func _on_zoom_reset_pressed() -> void:
+	map_controller.reset_view()
 
 func _on_end_turn_pressed() -> void:
 	_execute(CommandEnvelope.create(game_state.turn_state.active_player_id, game_state.state_revision, "end_turn"))
@@ -185,12 +216,20 @@ func _refresh_ui() -> void:
 	phase_label.text = "Phase: %s | Runde %d | Revision %d" % [game_state.turn_state.phase_name(), game_state.turn_state.round_number, game_state.state_revision]
 	player_label.text = "Am Zug: %s" % player.name
 	reinforcement_label.text = "Verstärkungen: %d | Karten: %d" % [player.reinforcements_remaining, player.territory_card_ids.size()]
+	for child in player_panel.get_children():
+		child.queue_free()
+	for player_id: String in game_state.players:
+		var listed_player := game_state.get_player(player_id)
+		var player_row := Label.new()
+		player_row.text = "%s  | Gebiete: %d  | Karten: %d%s" % [listed_player.name, listed_player.territory_count(game_state), listed_player.territory_card_ids.size(), "  ← am Zug" if player_id == game_state.turn_state.active_player_id else ""]
+		player_panel.add_child(player_row)
 	selection_label.text = "Auswahl: %s -> %s" % [source_id if not source_id.is_empty() else "—", target_id if not target_id.is_empty() else "—"]
 	var reinforcement_phase := game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT
 	reset_button.visible = reinforcement_phase
 	trade_button.visible = game_state.turn_state.phase == TurnState.Phase.CARD_TRADE or game_state.forced_trade_player_id == game_state.turn_state.active_player_id
 	primary_action.visible = game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT or game_state.turn_state.phase == TurnState.Phase.ATTACK or game_state.turn_state.phase == TurnState.Phase.FORTIFICATION
 	end_phase_button.visible = game_state.turn_state.phase != TurnState.Phase.TURN_END and game_state.status == GameState.MatchStatus.PLAYING
+	end_phase_button.text = "Verstärkungen bestätigen" if reinforcement_phase else "Phase beenden"
 	end_turn_button.visible = game_state.turn_state.phase == TurnState.Phase.TURN_END
 	if game_state.status == GameState.MatchStatus.FINISHED:
 		result_label.text = "Sieg: %s" % game_state.get_player(game_state.winner_player_id).name
