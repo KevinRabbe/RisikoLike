@@ -1,0 +1,33 @@
+; Engine configuration file.
+; RisikoLike
+config_version=5
+
+[application]
+
+config/name="RisikoLike"
+run/main_scene="res://scenes/boot/Boot.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[autoload]
+
+App="*res://scripts/app/app.gd"
+SceneRouter="*res://scripts/app/scene_router.gd"
+NetworkManager="*res://scripts/network/network_manager.gd"
+BackendClient="*res://scripts/backend/backend_client.gd"
+SessionManager="*res://scripts/app/session_manager.gd"
+SettingsManager="*res://scripts/persistence/settings_manager.gd"
+AudioManager="*res://scripts/app/audio_manager.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.035, 0.045, 0.06, 1)
