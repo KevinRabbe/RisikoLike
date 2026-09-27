@@ -30,7 +30,7 @@ func refresh() -> void:
 		button.text = "%s\n%d" % [definition.name_de, state.army_count]
 		button.tooltip_text = "%s | %s | %d Truppen" % [definition.name_de, state.owner_player_id, state.army_count]
 		var player := game_state.get_player(state.owner_player_id)
-		var color := player.color if player != null else Color.DIM_GRAY
+		var color := player.color if player != null else Color(0.2, 0.2, 0.2, 1.0)
 		if territory_id == hovered_territory_id or territory_id == selected_territory_id:
 			color = color.lightened(0.3)
 		button.modulate = color

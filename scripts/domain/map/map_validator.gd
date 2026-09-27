@@ -77,7 +77,7 @@ static func validate(map_data: MapData) -> PackedStringArray:
 static func is_valid(map_data: MapData) -> bool:
 	return validate(map_data).is_empty()
 
-static func _is_connected(map_data: MapData, ids: Array, _region_id: String) -> bool:
+static func _is_connected(map_data: MapData, ids, _region_id: String) -> bool:
 	if ids.is_empty():
 		return true
 	var allowed := {}

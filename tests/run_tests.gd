@@ -183,6 +183,7 @@ func _test_cards() -> void:
 	_expect_equal(trade.data.trade.bonus, 4, "first progressive card value")
 	_expect_equal(game.deck_state.trade_count, 1, "trade counter increments")
 	_expect(not processor.card_manager.is_valid_set([infantry[0], infantry[1]]), "incomplete card set rejected")
+	_expect(not processor.card_manager.is_valid_set([infantry[0], infantry[0], infantry[0]]), "duplicate physical card set rejected")
 	var one_each: Array[String] = []
 	var has_symbols := {}
 	for card: CardState in game.deck_state.cards.values():

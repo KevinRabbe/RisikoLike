@@ -61,8 +61,12 @@ func trade_cards(player_id: String, card_ids: Array[String]) -> Dictionary:
 func is_valid_set(card_ids: Array[String]) -> bool:
 	if card_ids.size() != 3:
 		return false
+	var unique_card_ids := {}
 	var cards: Array[CardState] = []
 	for card_id in card_ids:
+		if unique_card_ids.has(card_id):
+			return false
+		unique_card_ids[card_id] = true
 		var card := game_state.deck_state.get_card(card_id)
 		if card == null:
 			return false
