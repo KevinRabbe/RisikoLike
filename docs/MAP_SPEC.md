@@ -1,7 +1,7 @@
 # RisikoLike — Map Specification
 
 > **Status:** Pre-Production / Map Data  
-> **Dokumentversion:** 0.1  
+> **Dokumentversion:** 0.2  
 > **Bezug:** `docs/GDD.md`  
 > **Ziel:** Verbindliche Definition der V1-Weltkarte, Territoriums-IDs, Regionen, Nachbarschaften und Gebietskarten-Symbole.
 
@@ -52,17 +52,15 @@ polygon/mask
 
 | ID | Anzeigename | Nachbarn | Kartensymbol |
 |---|---|---|---|
-| NA_01 | Alaska | NA_02, NA_06, AS_12 | Infanterie |
+| NA_01 | Alaska | NA_02, NA_06, AS_11 | Infanterie |
 | NA_02 | Nordwestterritorium | NA_01, NA_03, NA_04, NA_06 | Kavallerie |
-| NA_03 | Grönland | NA_02, NA_04, NA_05, EU_01 | Artillerie |
+| NA_03 | Grönland | NA_02, NA_04, NA_05, NA_09, EU_01 | Artillerie |
 | NA_04 | Alberta | NA_02, NA_03, NA_05, NA_06 | Infanterie |
-| NA_05 | Ontario | NA_03, NA_04, NA_06, NA_07, NA_08 | Kavallerie |
+| NA_05 | Ontario | NA_03, NA_04, NA_06, NA_07, NA_08, NA_09 | Kavallerie |
 | NA_06 | Westliche USA | NA_01, NA_02, NA_04, NA_05, NA_07 | Artillerie |
-| NA_07 | Östliche USA | NA_05, NA_06, NA_08 | Infanterie |
+| NA_07 | Östliche USA | NA_05, NA_06, NA_08, NA_09 | Infanterie |
 | NA_08 | Mittelamerika | NA_05, NA_07, SA_01 | Kavallerie |
-| NA_09 | Kanadischer Archipel | NA_03, NA_05 | Artillerie |
-
-> `NA_09` ist eine eigene V1-Gebietsdefinition. Die konkrete grafische Grenzziehung wird mit dem Kartenasset finalisiert. Die Nachbarschaften werden vor Implementierung nochmals auf Kartenbalance geprüft.
+| NA_09 | Québec | NA_03, NA_05, NA_07 | Artillerie |
 
 ### Südamerika — 4
 
@@ -111,7 +109,7 @@ polygon/mask
 | AS_09 | Südostasien | AS_05, AS_07, AS_08, AS_10, OC_01 | Kavallerie |
 | AS_10 | Ostasien | AS_06, AS_07, AS_09, AS_11 | Artillerie |
 | AS_11 | Kamtschatka | AS_06, AS_10, AS_12, NA_01 | Infanterie |
-| AS_12 | Fernost | AS_11, NA_01 | Kavallerie |
+| AS_12 | Fernost | AS_11 | Kavallerie |
 
 ### Ozeanien — 4
 
@@ -124,15 +122,13 @@ polygon/mask
 
 ## 5. Karten-Symbolverteilung
 
-Aktuelle Zielverteilung:
+Validierter Stand:
 
-| Symbol | Soll |
-|---|---:|
-| Infanterie | 14 |
-| Kavallerie | 14 |
-| Artillerie | 14 |
-
-Die konkrete Tabelle in Abschnitt 4 muss vor dem Einfrieren der Map Spec automatisch validiert werden. Falls die Zählung durch spätere Gebietsänderungen abweicht, werden ausschließlich die Symbolzuordnungen angepasst; Territory-IDs bleiben stabil.
+| Symbol | Ist | Soll | Status |
+|---|---:|---:|---|
+| Infanterie | 14 | 14 | PASS |
+| Kavallerie | 14 | 14 | PASS |
+| Artillerie | 14 | 14 | PASS |
 
 ## 6. Verbindungsregeln
 
@@ -143,31 +139,63 @@ Die konkrete Tabelle in Abschnitt 4 muss vor dem Einfrieren der Map Spec automat
 - Der Host validiert Angriffe anhand dieser Nachbarschaftsdaten.
 - Fortification verwendet dieselben Nachbarschaftsdaten für die Pfadsuche durch eigene Territorien.
 
-## 7. Noch offen vor Map Freeze
+## 7. Validator-Spezifikation
 
-- `OFFEN` Finale Prüfung aller 42 geografischen Gebiete und Namen
-- `OFFEN` Balanceprüfung der Nachbarschaftsgraphen
-- `OFFEN` Finale Entscheidung zu `NA_09` und der nordamerikanischen Grenzziehung
-- `OFFEN` Finale deutsche Anzeigenamen
+Der spätere automatische Map-Validator muss bei Build/Test mindestens folgende Prüfungen ausführen:
+
+1. `territory_count == 42`
+2. alle Territory-IDs sind eindeutig
+3. alle sechs Region-IDs existieren
+4. Regionsgrößen entsprechen `9/4/7/6/12/4`
+5. jedes Territorium besitzt mindestens einen Nachbarn
+6. jede referenzierte Nachbar-ID existiert
+7. keine Territory-ID verweist auf sich selbst
+8. keine Nachbarschaft ist doppelt eingetragen
+9. für jede Kante `A -> B` existiert `B -> A`
+10. der gesamte Graph ist zusammenhängend
+11. jede Region ist intern zusammenhängend
+12. jedes Territorium besitzt genau ein Kartensymbol
+13. Symbolverteilung ist exakt `14/14/14`
+14. jede Gebietskarte verweist auf genau eine gültige Territory-ID
+15. keine Territory-ID besitzt mehr als eine Gebietskarte
+16. die zwei Joker besitzen keine Territory-ID
+17. Region-Bonuswerte sind nicht negativ
+18. später: jedes Territorium besitzt gültige Map-/Army-Marker-Koordinaten
+19. später: jedes Territorium besitzt eine gültige Klickfläche/Mask
+
+Ein fehlgeschlagener struktureller Test muss den Map-Datensatz für einen Release-Build als ungültig markieren.
+
+## 8. Aktueller Validierungsstand
+
+- `PASS` 42 Territory-IDs
+- `PASS` Regionsgrößen 9/4/7/6/12/4
+- `PASS` Kartensymbole 14/14/14
+- `PASS` alle dokumentierten Nachbarschaften bidirektional
+- `PASS` keine unbekannten Nachbar-IDs
+- `PASS` keine Selbstreferenzen
+- `PASS` Territory-Graph zusammenhängend
+- `PASS` Regionen intern zusammenhängend
+- `FIX` Pazifik-Verbindung für V1: `NA_01 <-> AS_11`
+- `FIX` `NA_09` ist Québec
+
+## 9. Noch offen vor Map Freeze
+
+- `OFFEN` Finale Balanceprüfung des Nachbarschaftsgraphen im tatsächlichen Spiel
+- `OFFEN` Finale deutsche Anzeigenamen/Schreibweisen
 - `OFFEN` Englische Anzeigenamen, falls Englisch in V1 enthalten ist
 - `OFFEN` Kartenprojektion und Seitenverhältnis
 - `OFFEN` Territoriums-Polygone/Masks
 - `OFFEN` Army-Marker-Koordinaten
 - `OFFEN` Kartenrand-/Wasserlinien im Asset
-- `OFFEN` Automatischer Validator für Anzahl, Symbole und bidirektionale Nachbarschaften
+- `OFFEN` Validator als ausführbarer Test im Projekt
 
-## 8. Map Freeze Kriterien
+## 10. Map Freeze Kriterien
 
-Die Karte darf für V1 erst als `FIX`/eingefroren gelten, wenn:
+Die Karte darf für V1 erst als vollständig eingefroren gelten, wenn:
 
-1. exakt 42 eindeutige Territory-IDs existieren;
-2. jede ID genau einer der sechs Regionen zugeordnet ist;
-3. die Regionsgrößen 9/4/7/6/12/4 ergeben;
-4. alle Nachbarschaften bidirektional sind;
-5. keine Nachbarschaft auf eine unbekannte ID zeigt;
-6. der gesamte Territory-Graph zusammenhängend ist;
-7. jede Region intern erreichbar ist;
-8. exakt 14 Infanterie-, 14 Kavallerie- und 14 Artillerie-Karten existieren;
-9. jede Gebietskarte genau einem Territorium zugeordnet ist;
-10. Kartenasset und Daten dieselben Verbindungen darstellen;
-11. für jedes Gebiet eine gültige Klickfläche und Army-Marker-Position vorhanden ist.
+1. alle strukturellen Validator-Prüfungen bestehen;
+2. Kartenasset und Daten dieselben Verbindungen darstellen;
+3. für jedes Gebiet eine gültige Klickfläche vorhanden ist;
+4. für jedes Gebiet eine Army-Marker-Position vorhanden ist;
+5. mindestens ein vollständiger Balance-/Playtest der Karte durchgeführt wurde;
+6. danach vorgenommene Änderungen an Territory-IDs oder Nachbarschaften explizit versioniert werden.
