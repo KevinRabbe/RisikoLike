@@ -139,6 +139,8 @@ func _begin_turn_internal() -> void:
 	player.card_drawn_this_turn = false
 	player.fortification_used = false
 	player.pending_trade_reinforcements = 0
+	forced_trade_player_id = ""
+	pending_reinforcements.clear()
 	pending_conquest.clear()
 	combat_state.clear()
 	if ruleset.territory_cards_enabled:
