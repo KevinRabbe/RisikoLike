@@ -181,3 +181,19 @@ def test_invalid_invite_and_rate_limit(fixture: tuple[FakeClock, LobbyRegistry, 
         json={"game_version": "0.1.0-dev", "protocol_version": 1, "max_players": 2},
     )
     assert limited.status_code == 429
+
+
+def test_turn_credentials_are_short_lived_and_not_static(monkeypatch, fixture: tuple[FakeClock, LobbyRegistry, TestClient]) -> None:
+    clock, _registry, client = fixture
+    monkeypatch.setenv("TURN_URL", "turn:127.0.0.1:3478")
+    monkeypatch.setenv("TURN_SHARED_SECRET", "test-only-secret")
+    created = create(client)
+    response = client.post(
+        f"/v1/lobbies/{created['lobby_id']}/turn-credentials",
+        headers={"Authorization": f"Bearer {created['host_session_token']}"},
+    )
+    assert response.status_code == 200
+    credentials = response.json()["ice_servers"][0]
+    assert credentials["urls"] == ["turn:127.0.0.1:3478"]
+    assert credentials["credential"] != "test-only-secret"
+    assert credentials["username"].startswith(str(int(clock.value) + 600))

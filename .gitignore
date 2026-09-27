@@ -3,6 +3,7 @@
 
 # Imported/generated files
 *.translation
+*.uid
 
 # Mono/.NET (future-proofing)
 .mono/

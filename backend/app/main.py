@@ -406,6 +406,7 @@ def create_app(registry: Optional[LobbyRegistry] = None) -> FastAPI:
             "host_session_token": token,
             "expires_at": _utc_iso(lobby.expires_at),
             "signaling_url": signaling_url(request),
+            "ice_servers": app.state.ice_servers,
         }
 
     @app.post("/v1/lobbies/resolve")
