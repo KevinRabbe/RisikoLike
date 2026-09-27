@@ -9,6 +9,7 @@ var ready_button: Button
 var start_button: Button
 var cards_check: CheckButton
 var continents_check: CheckButton
+var copy_button: Button
 
 func _ready() -> void:
 	_build_ui()
@@ -33,6 +34,10 @@ func _build_ui() -> void:
 	root.add_child(title_label)
 	invite_label = Label.new()
 	root.add_child(invite_label)
+	copy_button = Button.new()
+	copy_button.text = "Invite-Code kopieren"
+	copy_button.pressed.connect(_on_copy_invite_pressed)
+	root.add_child(copy_button)
 	var content := HBoxContainer.new()
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(content)
@@ -93,7 +98,11 @@ func _refresh(lobby: LobbyState) -> void:
 		status_label.text = "Keine Lobby aktiv."
 		return
 	title_label.text = "Lobby %s" % lobby.lobby_id
-	invite_label.text = "Development-Code: %s | localhost:%d | Status: %s" % [lobby.invite_code, NetworkManager.local_port, lobby.status_name()]
+	if NetworkManager.backend_mode:
+		invite_label.text = "Invite-Code: %s | Online-Signaling | Status: %s" % [lobby.invite_code, lobby.status_name()]
+	else:
+		invite_label.text = "Development-Code: %s | localhost:%d | Status: %s" % [lobby.invite_code, NetworkManager.local_port, lobby.status_name()]
+	copy_button.visible = NetworkManager.backend_mode and not lobby.invite_code.is_empty()
 	for child in players_list.get_children():
 		child.queue_free()
 	for player_id: String in _sorted_player_ids(lobby.players):
@@ -138,6 +147,11 @@ func _on_start_pressed() -> void:
 func _on_leave_pressed() -> void:
 	NetworkManager.leave_lobby()
 	SceneRouter.go_to_main_menu()
+
+func _on_copy_invite_pressed() -> void:
+	if NetworkManager.lobby_state != null:
+		DisplayServer.clipboard_set(NetworkManager.lobby_state.invite_code)
+		status_label.text = "Invite-Code kopiert."
 
 func _on_lobby_changed(snapshot: LobbySnapshot) -> void:
 	_refresh(snapshot)

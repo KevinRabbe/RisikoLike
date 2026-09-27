@@ -22,6 +22,12 @@ var game_state: GameState
 var lobby_state: LobbyState
 var command_processor: CommandProcessor
 var transport: NetworkTransport
+var backend_mode := false
+var _backend_pending_role := ""
+var _backend_pending_name := ""
+var _backend_pending_max_players := 2
+var _backend_pending_ruleset: Ruleset
+var _backend_heartbeat_elapsed := 0.0
 
 var _pending_join_name := ""
 var _peer_to_player: Dictionary = {}
@@ -29,10 +35,22 @@ var _next_player_number := 1
 
 func _ready() -> void:
 	set_process(true)
+	var backend := get_node_or_null("/root/BackendClient")
+	if backend != null:
+		backend.lobby_created.connect(_on_backend_lobby_created)
+		backend.lobby_resolved.connect(_on_backend_lobby_resolved)
+		backend.backend_request_failed.connect(_on_backend_request_failed)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if transport != null:
 		transport.poll()
+	if backend_mode and role == Role.HOST:
+		_backend_heartbeat_elapsed += delta
+		if _backend_heartbeat_elapsed >= 15.0:
+			_backend_heartbeat_elapsed = 0.0
+			var backend := get_node_or_null("/root/BackendClient")
+			if backend != null:
+				backend.heartbeat()
 
 func set_connection_state(next_state: String) -> void:
 	if connection_state == next_state:
@@ -41,6 +59,7 @@ func set_connection_state(next_state: String) -> void:
 	connection_changed.emit(connection_state)
 
 func host_local_lobby(player_name: String, max_players: int, p_ruleset: Ruleset = null, port: int = DEFAULT_LOCAL_PORT) -> Dictionary:
+	backend_mode = false
 	return _host_lobby(player_name, max_players, p_ruleset, port, LocalNetworkTransport.new())
 
 func host_lobby_on_transport(player_name: String, max_players: int, p_ruleset: Ruleset, p_transport: NetworkTransport, port: int = DEFAULT_LOCAL_PORT) -> Dictionary:
@@ -81,7 +100,110 @@ func _host_lobby(player_name: String, max_players: int, p_ruleset: Ruleset, port
 	return {"ok": true, "code": "OK", "lobby_id": lobby_id, "invite_code": lobby_state.invite_code, "player_id": local_player_id}
 
 func join_local_lobby(player_name: String, address: String = "127.0.0.1", port: int = DEFAULT_LOCAL_PORT) -> Dictionary:
+	backend_mode = false
 	return _join_lobby(player_name, address, port, LocalNetworkTransport.new())
+
+func host_online_lobby(player_name: String, max_players: int, p_ruleset: Ruleset = null) -> Dictionary:
+	if player_name.strip_edges().length() < 2 or player_name.strip_edges().length() > 20:
+		return {"ok": false, "code": "NAME_INVALID"}
+	if max_players < Ruleset.MIN_PLAYERS or max_players > Ruleset.MAX_PLAYERS:
+		return {"ok": false, "code": "INVALID_PLAYER_COUNT"}
+	var backend := get_node_or_null("/root/BackendClient")
+	if backend == null or not backend.is_configured():
+		return {"ok": false, "code": "BACKEND_NOT_CONFIGURED"}
+	_backend_pending_role = "host"
+	_backend_pending_name = player_name.strip_edges()
+	_backend_pending_max_players = max_players
+	_backend_pending_ruleset = p_ruleset.duplicate_ruleset() if p_ruleset != null else Ruleset.new()
+	backend_mode = true
+	return backend.create_lobby(max_players)
+
+func join_online_lobby(player_name: String, invite_code: String) -> Dictionary:
+	if player_name.strip_edges().length() < 2 or player_name.strip_edges().length() > 20:
+		return {"ok": false, "code": "NAME_INVALID"}
+	var backend := get_node_or_null("/root/BackendClient")
+	if backend == null or not backend.is_configured():
+		return {"ok": false, "code": "BACKEND_NOT_CONFIGURED"}
+	_backend_pending_role = "client"
+	_backend_pending_name = player_name.strip_edges()
+	_backend_pending_max_players = 2
+	_backend_pending_ruleset = null
+	backend_mode = true
+	return backend.resolve_invite_code(invite_code)
+
+func _on_backend_lobby_created(data: Dictionary) -> void:
+	if _backend_pending_role != "host":
+		return
+	var ruleset := _backend_pending_ruleset.duplicate_ruleset() if _backend_pending_ruleset != null else Ruleset.new()
+	var transport_instance := WebRTCNetworkTransport.new()
+	var backend := get_node_or_null("/root/BackendClient")
+	transport_instance.configure(backend, str(data.get("lobby_id", "")), str(data.get("host_session_token", "")), str(data.get("signaling_url", "")), data.get("ice_servers", []), false)
+	var result := _host_lobby_with_backend_identity(_backend_pending_name, _backend_pending_max_players, ruleset, transport_instance, data)
+	if not bool(result.get("ok", false)):
+		network_error.emit(str(result.get("code", "BACKEND_LOBBY_FAILED")))
+	_backend_pending_role = ""
+
+func _on_backend_lobby_resolved(data: Dictionary) -> void:
+	if _backend_pending_role != "client":
+		return
+	var backend := get_node_or_null("/root/BackendClient")
+	var transport_instance := WebRTCNetworkTransport.new()
+	transport_instance.configure(backend, str(data.get("lobby_id", "")), str(data.get("join_token", "")), str(data.get("signaling_url", "")), data.get("ice_servers", []), false)
+	_replace_transport(transport_instance)
+	role = Role.CLIENT
+	local_player_id = ""
+	lobby_id = str(data.get("lobby_id", ""))
+	match_id = ""
+	_pending_join_name = _backend_pending_name
+	_peer_to_player.clear()
+	local_port = 0
+	set_connection_state("connecting")
+	_sync_session()
+	if not transport.connect_to_host("backend", 0):
+		shutdown()
+		network_error.emit("SIGNALING_UNAVAILABLE")
+	_backend_pending_role = ""
+
+func _on_backend_request_failed(operation: String, code: String) -> void:
+	if _backend_pending_role.is_empty():
+		return
+	network_error.emit(BackendErrorMapper.to_game_code("%s:%s" % [operation, code]))
+	_backend_pending_role = ""
+	backend_mode = false
+
+func _host_lobby_with_backend_identity(player_name: String, max_players: int, p_ruleset: Ruleset, p_transport: NetworkTransport, data: Dictionary) -> Dictionary:
+	if p_ruleset == null:
+		p_ruleset = Ruleset.new()
+	var ruleset_errors := RulesetValidator.validate(p_ruleset)
+	if not ruleset_errors.is_empty():
+		return {"ok": false, "code": "INVALID_RULESET", "errors": ruleset_errors}
+	if not _replace_transport(p_transport):
+		return {"ok": false, "code": "TRANSPORT_UNAVAILABLE"}
+	if not transport.start_host(0):
+		return {"ok": false, "code": "SIGNALING_UNAVAILABLE"}
+	role = Role.HOST
+	backend_mode = true
+	local_port = 0
+	local_player_id = "P1"
+	lobby_id = str(data.get("lobby_id", ""))
+	match_id = ""
+	_pending_join_name = ""
+	_peer_to_player.clear()
+	_next_player_number = 2
+	lobby_state = LobbyState.new()
+	lobby_state.lobby_id = lobby_id
+	lobby_state.invite_code = str(data.get("invite_code", ""))
+	lobby_state.max_players = max_players
+	lobby_state.ruleset = p_ruleset
+	var add_result := lobby_state.add_player(local_player_id, player_name, 1, true)
+	if not bool(add_result.get("ok", false)):
+		shutdown()
+		return add_result
+	set_connection_state("hosting")
+	_sync_session()
+	_emit_lobby_changed()
+	print("[LOBBY] online host lobby=%s code=%s player=%s" % [lobby_id, lobby_state.invite_code, local_player_id])
+	return {"ok": true, "code": "OK", "lobby_id": lobby_id, "invite_code": lobby_state.invite_code, "player_id": local_player_id}
 
 func join_lobby_on_transport(player_name: String, p_transport: NetworkTransport, address: String = "in-process", port: int = DEFAULT_LOCAL_PORT) -> Dictionary:
 	return _join_lobby(player_name, address, port, p_transport)
@@ -160,6 +282,10 @@ func start_match(seed_value: int = 424242) -> Dictionary:
 	command_processor = CommandProcessor.new(game_state, RandomSource.new(seed_value))
 	match_id = game_state.match_id
 	lobby_state.status = LobbyState.Status.IN_GAME
+	if backend_mode:
+		var backend := get_node_or_null("/root/BackendClient")
+		if backend != null:
+			backend.mark_lobby_started()
 	set_connection_state("in_game")
 	_sync_session()
 	_broadcast_lobby()
@@ -185,6 +311,10 @@ func leave_lobby() -> Dictionary:
 
 func close_lobby() -> void:
 	if role == Role.HOST and lobby_state != null:
+		if backend_mode:
+			var backend := get_node_or_null("/root/BackendClient")
+			if backend != null:
+				backend.close_lobby()
 		lobby_state.status = LobbyState.Status.CLOSED
 		_broadcast(NetworkMessage.new(NetworkMessage.ERROR, {"code": "LOBBY_CLOSED"}, lobby_id))
 	shutdown()
@@ -220,6 +350,10 @@ func shutdown() -> void:
 	if transport != null:
 		transport.close()
 	transport = null
+	if backend_mode:
+		var backend := get_node_or_null("/root/BackendClient")
+		if backend != null:
+			backend.clear_session()
 	role = Role.NONE
 	connection_state = "offline"
 	local_player_id = ""
@@ -230,6 +364,11 @@ func shutdown() -> void:
 	command_processor = null
 	_peer_to_player.clear()
 	_pending_join_name = ""
+	_backend_pending_role = ""
+	_backend_pending_name = ""
+	_backend_pending_ruleset = null
+	_backend_heartbeat_elapsed = 0.0
+	backend_mode = false
 	_sync_session()
 	connection_changed.emit(connection_state)
 

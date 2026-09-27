@@ -1,12 +1,17 @@
 extends Control
 
 var player_name_input: LineEdit
+var invite_code_input: LineEdit
 var address_input: LineEdit
 var port_spin: SpinBox
+var debug_check: CheckButton
 var status_label: Label
+var waiting_for_backend := false
 
 func _ready() -> void:
 	_build_ui()
+	NetworkManager.lobby_changed.connect(_on_lobby_changed)
+	NetworkManager.network_error.connect(_on_network_error)
 
 func _build_ui() -> void:
 	var center := CenterContainer.new()
@@ -25,24 +30,37 @@ func _build_ui() -> void:
 	content.add_theme_constant_override("separation", 12)
 	margin.add_child(content)
 	var title := Label.new()
-	title.text = "Lokaler Lobby beitreten"
+	title.text = "Lobby beitreten"
 	title.add_theme_font_size_override("font_size", 30)
 	content.add_child(title)
-	content.add_child(_label("Development Local Join — kein Internet-Backend"))
+	content.add_child(_label("Invite-Code eingeben; der Host muss keine IP oder Portfreigabe teilen."))
 	content.add_child(_label("Spielername"))
 	player_name_input = LineEdit.new()
 	player_name_input.text = SettingsManager.player_name
 	player_name_input.max_length = 20
 	content.add_child(player_name_input)
+	content.add_child(_label("Invite-Code (ABC-123)"))
+	invite_code_input = LineEdit.new()
+	invite_code_input.placeholder_text = "ABC-123"
+	invite_code_input.max_length = 7
+	content.add_child(invite_code_input)
+	debug_check = CheckButton.new()
+	debug_check.text = "Lokalen TCP-Debugmodus verwenden"
+	debug_check.toggled.connect(_on_debug_toggled)
+	content.add_child(debug_check)
 	content.add_child(_label("Host-Adresse"))
 	address_input = LineEdit.new()
 	address_input.text = "127.0.0.1"
+	address_input.visible = false
 	content.add_child(address_input)
-	content.add_child(_label("Development-Port"))
+	var port_label := _label("Development-Port")
+	port_label.visible = false
+	content.add_child(port_label)
 	port_spin = SpinBox.new()
 	port_spin.min_value = 1
 	port_spin.max_value = 65535
 	port_spin.value = NetworkManager.DEFAULT_LOCAL_PORT
+	port_spin.visible = false
 	content.add_child(port_spin)
 	status_label = Label.new()
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -66,11 +84,23 @@ func _on_join_pressed() -> void:
 		return
 	SettingsManager.player_name = cleaned_name
 	SettingsManager.save_settings()
-	var result := NetworkManager.join_local_lobby(cleaned_name, address_input.text.strip_edges(), int(port_spin.value))
+	var result: Dictionary
+	if debug_check.button_pressed:
+		result = NetworkManager.join_local_lobby(cleaned_name, address_input.text.strip_edges(), int(port_spin.value))
+	else:
+		var code := _normalize_invite_code(invite_code_input.text)
+		if code.is_empty():
+			status_label.text = "Invite-Code muss das Format ABC-123 haben."
+			return
+		waiting_for_backend = true
+		status_label.text = "Backend: Invite-Code wird aufgelöst …"
+		result = NetworkManager.join_online_lobby(cleaned_name, code)
 	if not bool(result.get("ok", false)):
+		waiting_for_backend = false
 		status_label.text = "Beitreten fehlgeschlagen: %s" % result.get("code", "NETWORK_ERROR")
 		return
-	SceneRouter.go_to_lobby()
+	if debug_check.button_pressed:
+		SceneRouter.go_to_lobby()
 
 func _on_back_pressed() -> void:
 	SceneRouter.go_to_main_menu()
@@ -79,3 +109,30 @@ func _label(value: String) -> Label:
 	var label := Label.new()
 	label.text = value
 	return label
+
+func _on_debug_toggled(enabled: bool) -> void:
+	address_input.visible = enabled
+	port_spin.visible = enabled
+	invite_code_input.visible = not enabled
+	for child in address_input.get_parent().get_children():
+		if child is Label and child.text == "Development-Port":
+			child.visible = enabled
+
+func _on_lobby_changed(_snapshot: LobbySnapshot) -> void:
+	if waiting_for_backend and NetworkManager.lobby_state != null:
+		waiting_for_backend = false
+		SceneRouter.go_to_lobby()
+
+func _on_network_error(code: String) -> void:
+	if waiting_for_backend:
+		waiting_for_backend = false
+		status_label.text = "Backend/Netzwerk: %s" % code
+
+func _normalize_invite_code(value: String) -> String:
+	var compact := value.strip_edges().replace("-", "").replace(" ", "").to_upper()
+	if compact.length() != 6:
+		return ""
+	for character in compact:
+		if not "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".contains(character):
+			return ""
+	return "%s-%s" % [compact.substr(0, 3), compact.substr(3, 3)]

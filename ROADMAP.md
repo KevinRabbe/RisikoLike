@@ -300,6 +300,8 @@ Zwei lokale Instanzen können Lobby -> Ready -> Match gemeinsam durchlaufen.
 
 # M7 — Backend Minimum Viable Service
 
+> **Status:** Abgeschlossen — FastAPI/Uvicorn-Rendezvous, Invite-Codes, Token-Auth, TTL/Heartbeat, REST und authentifiziertes WebSocket-Signaling validiert.
+
 ## Ziel
 
 Invite-Code und Signaling-Service existieren als minimaler Entwicklungsbackend.
@@ -333,6 +335,8 @@ Host erhält `ABC-123`; zweiter Client kann diesen Code über Backend erfolgreic
 ---
 
 # M8 — WebRTC Internet Multiplayer
+
+> **Status:** Technisch implementiert — lokaler Zwei-Prozess-WebRTC-Flow über Backend/Signaling/Data Channel und autorisierte Reinforcement-Aktion validiert. Getrennte-Netzwerke- und erzwungene-TURN-Runtime-Abnahme bleiben manuell ausstehend.
 
 ## Ziel
 

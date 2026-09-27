@@ -3,12 +3,16 @@ extends Control
 var player_name_input: LineEdit
 var max_players_spin: SpinBox
 var port_spin: SpinBox
+var debug_check: CheckButton
 var cards_check: CheckButton
 var continents_check: CheckButton
 var status_label: Label
+var waiting_for_backend := false
 
 func _ready() -> void:
 	_build_ui()
+	NetworkManager.lobby_changed.connect(_on_lobby_changed)
+	NetworkManager.network_error.connect(_on_network_error)
 
 func _build_ui() -> void:
 	var center := CenterContainer.new()
@@ -27,10 +31,10 @@ func _build_ui() -> void:
 	content.add_theme_constant_override("separation", 12)
 	margin.add_child(content)
 	var title := Label.new()
-	title.text = "Lokale Lobby erstellen"
+	title.text = "Lobby erstellen"
 	title.add_theme_font_size_override("font_size", 30)
 	content.add_child(title)
-	content.add_child(_label("M5/M6 Development-Transport: localhost TCP"))
+	content.add_child(_label("Online-Lobby per Invite-Code; TCP bleibt als Debug-Modus verfügbar."))
 	content.add_child(_label("Spielername"))
 	player_name_input = LineEdit.new()
 	player_name_input.text = SettingsManager.player_name
@@ -42,11 +46,16 @@ func _build_ui() -> void:
 	max_players_spin.max_value = 5
 	max_players_spin.value = 2
 	content.add_child(max_players_spin)
+	debug_check = CheckButton.new()
+	debug_check.text = "Lokalen TCP-Debugmodus verwenden"
+	debug_check.toggled.connect(_on_debug_toggled)
+	content.add_child(debug_check)
 	content.add_child(_label("Development-Port"))
 	port_spin = SpinBox.new()
 	port_spin.min_value = 1024
 	port_spin.max_value = 65535
 	port_spin.value = NetworkManager.DEFAULT_LOCAL_PORT
+	port_spin.visible = false
 	content.add_child(port_spin)
 	cards_check = CheckButton.new()
 	cards_check.text = "Gebietskarten aktiv"
@@ -81,11 +90,32 @@ func _on_create_pressed() -> void:
 	var ruleset := Ruleset.new()
 	ruleset.territory_cards_enabled = cards_check.button_pressed
 	ruleset.continent_bonus_enabled = continents_check.button_pressed
-	var result := NetworkManager.host_local_lobby(cleaned_name, int(max_players_spin.value), ruleset, int(port_spin.value))
+	var result: Dictionary
+	if debug_check.button_pressed:
+		result = NetworkManager.host_local_lobby(cleaned_name, int(max_players_spin.value), ruleset, int(port_spin.value))
+	else:
+		waiting_for_backend = true
+		status_label.text = "Backend: Lobby wird erstellt …"
+		result = NetworkManager.host_online_lobby(cleaned_name, int(max_players_spin.value), ruleset)
 	if not bool(result.get("ok", false)):
+		waiting_for_backend = false
 		status_label.text = "Erstellen fehlgeschlagen: %s" % result.get("code", "NETWORK_ERROR")
 		return
-	SceneRouter.go_to_lobby()
+	if debug_check.button_pressed:
+		SceneRouter.go_to_lobby()
+
+func _on_debug_toggled(enabled: bool) -> void:
+	port_spin.visible = enabled
+
+func _on_lobby_changed(_snapshot: LobbySnapshot) -> void:
+	if waiting_for_backend and NetworkManager.lobby_state != null:
+		waiting_for_backend = false
+		SceneRouter.go_to_lobby()
+
+func _on_network_error(code: String) -> void:
+	if waiting_for_backend:
+		waiting_for_backend = false
+		status_label.text = "Backend/Netzwerk: %s" % code
 
 func _on_back_pressed() -> void:
 	SceneRouter.go_to_main_menu()
