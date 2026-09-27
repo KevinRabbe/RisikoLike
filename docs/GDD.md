@@ -1,13 +1,14 @@
 # RisikoLike — Game Design Document
 
 > **Status:** Pre-Production / Spezifikation  
-> **Dokumentversion:** 0.1  
-> **Ziel:** Dieses Dokument ist die verbindliche Source of Truth für Design, Regeln, Multiplayer, UI und technische Grundentscheidungen vor Beginn der eigentlichen Implementierung.
+> **Dokumentversion:** 0.2  
+> **Ziel:** Verbindliche Source of Truth für Regeln, Lobby, Multiplayer, UI und technische Grundentscheidungen vor Beginn der Implementierung.
 
 ## Status-Legende
 
-- `FIX` — beschlossen
-- `OFFEN` — muss entschieden werden
+- `FIX` — beschlossen und nicht während einer Partie veränderbar
+- `CONFIG` — Host kann die Regel vor Matchstart konfigurieren; Default ist festgelegt
+- `OFFEN` — muss noch entschieden werden
 - `V1` — Bestandteil der ersten spielbaren Version
 - `SPÄTER` — bewusst nicht Bestandteil von V1
 - `VERWORFEN` — explizit ausgeschlossen
@@ -23,123 +24,79 @@
 | GDD-PROJ-003 | Primärplattform | FIX | Windows PC |
 | GDD-PROJ-004 | Genre | FIX | Rundenbasiertes Multiplayer-Gebietseroberungs-Strategiespiel |
 | GDD-PROJ-005 | Kernmodus | FIX / V1 | Private Multiplayer-Partie mit Host und Invite-Code |
-| GDD-PROJ-006 | Spieleranzahl | OFFEN | Zielbereich zunächst 2–5 Spieler; final festlegen |
+| GDD-PROJ-006 | Spieleranzahl | FIX / V1 | 2–5 Spieler |
 | GDD-PROJ-007 | Sprache V1 | OFFEN | Deutsch / Englisch / beide |
-| GDD-PROJ-008 | Ziel-Spieldauer | OFFEN | Noch festzulegen |
+| GDD-PROJ-008 | Ziel-Spieldauer | OFFEN | |
 | GDD-PROJ-009 | Eigene Spielidentität | FIX | Eigener Name, eigene Grafik, eigene UI und eigene Kartenpräsentation |
 
-# 2. Designziele
+# 2. Designprinzipien
 
-- `FIX` Leicht verständlicher rundenbasierter Spielfluss.
-- `FIX` Private Partien sollen mit möglichst wenigen Schritten gestartet werden können.
-- `FIX` Ein Spieler hostet die Partie.
+- `FIX` Ein Spieler hostet die Partie; der Host ist autoritativ für den Game State.
 - `FIX` Andere Spieler treten über einen Invite-Code bei.
-- `FIX` Der Host ist für den autoritativen Game State verantwortlich.
-- `FIX` Regeln und Game State werden von Darstellung/UI getrennt.
-- `FIX` Keine Abhängigkeit von geschützten Originalgrafiken oder Originaltexten eines kommerziellen Brettspiels.
-- `V1` Fokus auf einen stabilen Kernmodus statt großer Feature-Menge.
+- `FIX` Clients senden Aktionen/Intents; sie bestimmen keine autoritativen Ergebnisse.
+- `FIX` Regeln und Game State sind von Darstellung/UI getrennt.
+- `FIX` Keine kommerziellen Originalgrafiken, Logos oder wörtlich kopierten Regel-/Kartentexte.
+- `FIX` Sinnvolle Regelvarianten werden als Lobby-`CONFIG` statt als Hardcode umgesetzt.
+- `FIX` Das Ruleset wird bei Matchstart gesperrt und danach nicht mehr verändert.
+- `V1` Fokus auf einen stabilen Kernmodus.
 
 # 3. Scope V1
 
-- Hauptmenü
-- Spielername
-- Lobby erstellen
-- Invite-Code erzeugen
-- Lobby per Invite-Code beitreten
-- Lobby-Spielerliste
-- Ready-System
-- Host kann Partie starten
-- Eigene Welt-/Gebietskarte
-- Territorien auswählen
-- Territoriumsbesitz
-- Truppen pro Territorium
-- Verstärkungsphase
-- Angriffsphase
-- Würfelkampf
-- Gebietseroberung
-- Truppenbewegungsphase
-- Zugwechsel
-- Spielerausscheidung
-- Siegbedingung
-- Disconnect-Behandlung
-- Reconnect-Grundfunktion
-- Rückkehr ins Hauptmenü
+Hauptmenü, Spielername, private Lobby, Invite-Code, Ready-System, Host-Ruleset, 2–5 Spieler, 42 Territorien / 6 Regionen, Verstärkungen, Gebietskarten, Angriffe, Würfelkampf, Gebietseroberung, Truppenbewegung, Zugwechsel, Ausscheiden/Zuschauen, Welteroberung, Zugtimer, Disconnect/Reconnect, Aufgeben und Windows-Build.
 
-# 4. Nicht-Ziele für V1
+# 4. Nicht-Ziele V1
 
-- `SPÄTER` KI-Spieler
-- `SPÄTER` Singleplayer
-- `SPÄTER` Öffentliche Lobby-Liste
-- `SPÄTER` Matchmaking
-- `SPÄTER` Accounts
-- `SPÄTER` Freundesliste
-- `SPÄTER` Ranglisten
-- `SPÄTER` Achievements
-- `SPÄTER` Replays
-- `SPÄTER` Zuschauer
-- `SPÄTER` Map-Editor
-- `SPÄTER` Steam-Integration
-- `SPÄTER` Dedicated Game Server
-- `SPÄTER` Alternative Karten
-- `SPÄTER` Alternative Spielmodi
+`SPÄTER`: KI, Singleplayer, öffentliche Lobbys/Matchmaking, Accounts, Freundesliste, Ranglisten, Achievements, Replays, Map-Editor, Steam-Integration, Dedicated Game Server, alternative Karten, Missionen, Host-Migration, Unlimited Fortification.
 
 # 5. Spieler und Partie
 
-| ID | Regel | Status | Festlegung |
-|---|---|---|---|
-| GDD-MATCH-001 | Mindestspielerzahl | OFFEN | |
-| GDD-MATCH-002 | Maximalspielerzahl | OFFEN | |
-| GDD-MATCH-003 | Startspieler-Auswahl | OFFEN | |
-| GDD-MATCH-004 | Zugreihenfolge | OFFEN | |
-| GDD-MATCH-005 | Spielerfarben | OFFEN | Farben und Auswahlverfahren festlegen |
-| GDD-MATCH-006 | Ausscheiden | FIX | Spieler scheidet aus, wenn er kein Territorium mehr kontrolliert |
-| GDD-MATCH-007 | Haupt-Siegbedingung | OFFEN | Welteroberung als V1-Kandidat |
-| GDD-MATCH-008 | Unentschieden | OFFEN | |
-| GDD-MATCH-009 | Aufgabe | OFFEN | Verhalten bei freiwilligem Verlassen festlegen |
+| Regel | Status | Festlegung |
+|---|---|---|
+| Mindestspieler | FIX | 2 |
+| Maximalspieler | FIX | 5 |
+| Startspieler | CONFIG | Default: wenigste Gesamttruppen; Gleichstand zufällig zwischen den gleich niedrigsten Spielern. Alternative: komplett zufällig. |
+| Zugreihenfolge | FIX | Nach Festlegung bleibt sie bestehen; ausgeschiedene Spieler werden übersprungen. |
+| Sieg | FIX / V1 | Welteroberung: ein Spieler kontrolliert alle Territorien. |
+| Ausscheiden | FIX | Kein kontrolliertes Territorium mehr. |
+| Aufgeben | CONFIG | Default erlaubt. |
+| Zuschauer | CONFIG | Default erlaubt; eliminierte/aufgegebene Spieler dürfen zuschauen oder verlassen. |
+| Spielerfarben | OFFEN | |
 
-# 6. Spielaufbau
+# 6. Karte und Spielaufbau
 
-- Anzahl Territorien: `OFFEN`
-- Anzahl Regionen/Kontinente: `OFFEN`
-- Startgebietsverteilung: `OFFEN`
-- Starttruppen je Spieler: `OFFEN`
-- Starttruppen auf Startgebieten: `OFFEN`
-- Reihenfolge der Startplatzierung: `OFFEN`
-- Zufällige oder manuelle Gebietsverteilung: `OFFEN`
-- Neutral kontrollierte Gebiete: `OFFEN`
-- Startspieler: `OFFEN`
+- `FIX` 42 Territorien, 6 Regionen/Kontinente.
+- `FIX` Reale geografische Anzeigenamen; eigene Kartengrafik und Grenzdarstellung.
+- `FIX` Stabile interne IDs getrennt von Anzeigenamen (`NA_01`, `EU_01` usw.).
+- `CONFIG` Startgebiete: **Zufällig (Default)** / **Manuell**.
+- `FIX` Jedes Startterritorium beginnt mit mindestens 1 Truppe.
+- `FIX` Keine neutrale Partei und keine KI im 2-Spieler-Modus; alle 42 Gebiete werden aufgeteilt.
+- `FIX` Starttruppen: 2 Spieler = 40, 3 = 35, 4 = 30, 5 = 25 pro Spieler.
+- `CONFIG` Starttruppen: Standardwerte / benutzerdefiniert.
+- `FIX` Manuell: Spieler wählen reihum freie Territorien.
+- `FIX` Danach werden verbleibende Starttruppen auf eigene Territorien verteilt.
 
-# 7. Karte und Territorien
+## 6.1 Regionen und Boni
 
-Jedes Territorium benötigt mindestens:
+| Region | Territorien | Default-Bonus |
+|---|---:|---:|
+| Nordamerika | 9 | +5 |
+| Südamerika | 4 | +2 |
+| Europa | 7 | +5 |
+| Afrika | 6 | +3 |
+| Asien | 12 | +7 |
+| Australien/Ozeanien | 4 | +2 |
+| **Gesamt** | **42** | |
 
-- eindeutige Territory-ID
-- Anzeigename
-- Region/Kontinent
-- Liste benachbarter Territory-IDs
-- Besitzer-ID
-- Truppenanzahl
-- Kartenposition
-- Position der Truppenanzeige
-- klickbare Fläche/Polygon
-- Hover-Darstellung
-- Selected-Darstellung
+`CONFIG`: Kontinentboni standardmäßig **AN**, Host kann sie deaktivieren.
 
-Zu definieren:
+# 7. Territory-Datenmodell
 
-- Kartenprojektion / Stil: `OFFEN`
-- konkrete Territorien: `OFFEN`
-- konkrete Nachbarschaften: `OFFEN`
-- Wasserverbindungen: `OFFEN`
-- Kartenrand-Verbindungen: `OFFEN`
-- Regionen/Kontinente: `OFFEN`
-- Regionsboni: `OFFEN`
-- Zoom: `OFFEN`
-- Kamerabewegung: `OFFEN`
+Je Territorium: stabile ID, Anzeigename, Region-ID, Nachbar-IDs, Besitzer-ID, Truppenanzahl, Kartensymboltyp, Kartenposition, Army-Marker-Position, klickbare Fläche/Polygon, Hover- und Selected-Darstellung.
+
+- `FIX` Nachbarschaften werden explizit in Daten definiert und nicht aus der Grafik abgeleitet.
+- `OFFEN` konkrete 42 Namen, Nachbarschaften, Wasser-/Randverbindungen, Koordinaten und Symbolzuordnung.
 
 # 8. Zugablauf
-
-Vorgesehener Grundablauf:
 
 1. Verstärken
 2. Angreifen
@@ -147,435 +104,171 @@ Vorgesehener Grundablauf:
 4. Zug beenden
 5. Nächster aktiver Spieler
 
-| ID | Regel | Status |
-|---|---|---|
-| GDD-TURN-001 | Phasenreihenfolge | FIX / V1 |
-| GDD-TURN-002 | Verstärkungsphase überspringbar | OFFEN |
-| GDD-TURN-003 | Angriffsphase überspringbar | OFFEN |
-| GDD-TURN-004 | Bewegungsphase überspringbar | OFFEN |
-| GDD-TURN-005 | Zug-Zeitlimit | OFFEN |
-| GDD-TURN-006 | AFK-Regel | OFFEN |
+- `FIX` Verstärkungen müssen vollständig verteilt werden, bevor angegriffen wird.
+- `FIX` Angriff und Bewegung dürfen übersprungen werden.
+- `CONFIG` Zugtimer Default **3 Min.**; Optionen **Aus / 2 / 3 / 5 Min.**
+- `FIX` Timer gilt für den kompletten Zug; Warnung bei 30 Sekunden.
+- `FIX` Bei Ablauf bleiben bestätigte Aktionen; unbestätigte Aktion wird verworfen und Zug endet.
 
 # 9. Verstärkungen
 
-Zu definieren:
+- `FIX` Basis: `floor(eigene Territorien / 3)`, Minimum 3.
+- `FIX` Regionsbonus nur bei vollständiger Kontrolle zu Beginn des Zuges; zusätzlich zur Basis.
+- `FIX` Nur auf eigene Territorien.
+- `FIX` Alle Verstärkungen müssen verteilt werden.
+- `FIX` Vor Bestätigung darf geändert/rückgängig gemacht werden; Bestätigung ist verbindlich.
+- `CONFIG` Kontinentboni Default AN.
 
-- Basisformel für Gebietsverstärkung: `OFFEN`
-- Mindestverstärkung: `OFFEN`
-- Regions-/Kontinentbonus: `OFFEN`
-- Zeitpunkt der Berechnung: `OFFEN`
-- Platzierung nur auf eigenen Gebieten: `OFFEN`
-- Verstärkungen müssen vollständig verteilt werden: `OFFEN`
-- Rücknahme vor Bestätigung: `OFFEN`
-- Bestätigungsmechanismus: `OFFEN`
+# 10. Angriff und Würfel
 
-# 10. Angriffssystem
+- `FIX` Angriff nur vom eigenen auf ein direkt benachbartes feindliches Territorium.
+- `FIX` Mindestens 1 Truppe bleibt im Ausgangsgebiet.
+- `FIX` Angreifer: 1–3 Würfel; Verteidiger: 1–2 Würfel; jeweils durch verfügbare Truppen begrenzt.
+- `FIX` Zulässige Würfelanzahl wird vom jeweiligen Spieler gewählt.
+- `FIX` Ergebnisse je Seite absteigend; höchster gegen höchsten, ggf. zweithöchster gegen zweithöchsten.
+- `FIX` Gleichstand gewinnt Verteidiger.
+- `FIX` Verlierer jedes Vergleichs verliert 1 Truppe; maximal 2 Verluste pro Wurf.
+- `FIX` Beliebig viele Angriffe; Angriffsphase freiwillig beendbar.
+- `FIX / V1` RNG ausschließlich beim Host; Ergebnis wird repliziert.
+- `SPÄTER` Schnellkampf/Auto-Roll als reine Komfortfunktion.
 
-Zu definieren:
+# 11. Gebietseroberung
 
-- Angriff nur von eigenem Territorium: `OFFEN`
-- Ziel muss feindlich sein: `OFFEN`
-- Ziel muss benachbart sein: `OFFEN`
-- Mindesttruppen für Angriff: `OFFEN`
-- maximale Angriffswürfel: `OFFEN`
-- maximale Verteidigungswürfel: `OFFEN`
-- automatische oder manuelle Würfelanzahl: `OFFEN`
-- weitere Angriffe nach Kampf: `OFFEN`
-- Angriff jederzeit beenden: `OFFEN`
-- Angriff mit letzter stationierter Truppe verboten: `OFFEN`
+- `FIX` Bei 0 verteidigenden Truppen wird das Gebiet sofort erobert.
+- `FIX` Besitzer wechselt zum Angreifer.
+- `FIX` Angreifer muss Truppen einziehen lassen.
+- `FIX` Minimum = Anzahl der beim letzten Angriff verwendeten Angriffswürfel.
+- `FIX` Maximum = alle verfügbaren Truppen außer 1 im Ausgangsgebiet.
+- `FIX` Danach darf aus dem neuen Gebiet weiter angegriffen werden.
+- `FIX` Nach relevanter Eroberung werden Eliminierung und Sieg geprüft.
 
-# 11. Würfelsystem
+# 12. Truppenbewegung / Fortification
 
-Zu definieren:
+- `FIX` Standardmäßig eine bestätigte Bewegung pro Zug.
+- `FIX` Ausgang und Ziel gehören dem Spieler; mindestens 1 Truppe bleibt zurück.
+- `CONFIG` **Connected (Default)** / **Adjacent**.
+- `FIX` Connected: zusammenhängender eigener Pfad genügt.
+- `FIX` Adjacent: direkt benachbart.
+- `FIX` Beliebig viele übrige Truppen in der einen Bewegung; vor Bestätigung änderbar/abbrechbar.
+- `FIX` Phase darf übersprungen werden.
+- `SPÄTER / CONFIG` Unlimited Fortification ON/OFF; ermöglicht mehrere Bewegungen pro Phase.
 
-- Würfeltyp: `OFFEN`
-- Anzahl Angreiferwürfel: `OFFEN`
-- Anzahl Verteidigerwürfel: `OFFEN`
-- Sortierung der Würfel: `OFFEN`
-- Paarvergleich: `OFFEN`
-- Gleichstand: `OFFEN`
-- Verlust pro Vergleich: `OFFEN`
-- RNG ausschließlich beim Host: `FIX / V1`
-- Würfelergebnis wird an Clients repliziert: `FIX / V1`
+# 13. Gebietskarten
 
-# 12. Gebietseroberung
+- `CONFIG / V1` Gebietskarten Default AN; Host kann AUS wählen.
+- `FIX` 42 Gebietskarten: eine pro Territorium; 14 Infanterie, 14 Kavallerie, 14 Artillerie.
+- `FIX` Zusätzlich 2 Joker ohne Territorium; 44 Karten gesamt.
+- `FIX` Host mischt/verwaltert Deck, Hände und Ablage autoritativ.
+- `FIX` Mindestens ein erobertes Territorium im Zug = genau 1 Karte am Zugende.
+- `FIX` Gültiges Set: 3 gleiche Symbole oder je 1 Symbol jeder Art; Joker ersetzt beliebigen Typ.
+- `FIX` Gegner sehen nur Kartenanzahl.
+- `FIX` Leerer Nachziehstapel: Ablage neu mischen.
 
-Zu definieren:
+## 13.1 Kartentausch
 
-- Eroberung bei 0 verteidigenden Truppen: `OFFEN`
-- Mindesttruppen, die einziehen müssen: `OFFEN`
-- maximale einziehende Truppen: `OFFEN`
-- manuelle Auswahl der einziehenden Truppen: `OFFEN`
-- Besitzerwechsel: `V1`
-- unmittelbare Sieg-/Eliminierungsprüfung: `OFFEN`
-- Angriff nach Eroberung fortsetzbar: `OFFEN`
+- `CONFIG` Kartenbonus: **Progressiv (Default)** / Fest.
+- `FIX` Global progressiv: `4 → 6 → 8 → 10 → 12 → 15 → 20 → 25 → 30 → ...`, danach +5.
+- `FIX` Normaler Tausch zu Beginn der Verstärkungsphase.
+- `CONFIG` Pflichttausch ab 5 Karten: Default Pflicht / Alternative optional.
+- `FIX` Unter Pflichtlimit freiwillig; mehrere gültige Sets pro Zug erlaubt.
+- `CONFIG` Gebietsbonus Default +2 / Aus.
+- `FIX` Eigene eingetauschte Gebietskarte gibt bei aktivem Bonus +2 auf dieses Gebiet; Joker keinen Gebietsbonus.
+- `FIX` Karten eliminierter Spieler gehen an den eliminierenden Spieler.
+- `FIX` Erreicht dieser dadurch das Pflichtlimit, muss er während der Angriffsphase sofort tauschen, bis er darunter liegt; Truppen werden sofort platziert, danach kann Angriff weitergehen.
+- `SPÄTER` Missionskarten.
 
-# 13. Truppenbewegung
+# 14. Lobby-Ruleset
 
-Zu definieren:
+| Einstellung | Default | Optionen |
+|---|---|---|
+| Startgebiete | Zufällig | Zufällig / Manuell |
+| Starttruppen | Standard | Standard / Benutzerdefiniert |
+| Startspieler | Wenigste Truppen | Wenigste Truppen / Zufällig |
+| Zugtimer | 3 Min. | Aus / 2 / 3 / 5 Min. |
+| Reconnect-Zeit | 3 Min. | 1 / 3 / 5 / 10 Min. |
+| Gebietskarten | An | An / Aus |
+| Kartenbonus | Progressiv | Progressiv / Fest |
+| Tauschpflicht ab 5 | Pflicht | Pflicht / Optional |
+| Gebietsbonus Kartentausch | +2 | +2 / Aus |
+| Kontinentboni | An | An / Aus |
+| Fortification | Connected | Connected / Adjacent |
+| Aufgeben | Erlaubt | Erlaubt / Verboten |
+| Zuschauer | Erlaubt | Erlaubt / Verboten |
+| Siegbedingung | Welteroberung | V1 nur Welteroberung |
 
-- Anzahl Bewegungen pro Zug: `OFFEN`
-- nur benachbarte Gebiete: `OFFEN`
-- Bewegung über zusammenhängende eigene Gebiete: `OFFEN`
-- Mindesttruppen im Ausgangsgebiet: `OFFEN`
-- maximale bewegte Truppen: `OFFEN`
-- Rücknahme vor Bestätigung: `OFFEN`
+- `FIX` Button **Standardregeln wiederherstellen**.
+- `FIX` Ruleset wird bei Matchstart immutable und an alle Clients synchronisiert.
+- `SPÄTER` Unlimited Fortification als Host-Regel.
+- `OFFEN` Grenzen für benutzerdefinierte Starttruppen und Wert des festen Kartenbonus.
 
-# 14. Sieg und Ausscheiden
+# 15. Lobby / Invite-Code
 
-- Haupt-Siegbedingung: `OFFEN`
-- Siegprüfung nach jeder Eroberung: `OFFEN`
-- Siegprüfung am Zugende: `OFFEN`
-- Verhalten eliminierter Spieler: `OFFEN`
-- Zuschauerstatus nach Eliminierung: `OFFEN`
-- Verhalten ihrer Verbindung: `OFFEN`
-- Ergebnisanzeige: `V1`
-- Rematch: `SPÄTER`
+Benötigt: Lobby erstellen/verlassen, Invite-Code anzeigen/kopieren/eingeben, beitreten, Spieler-Slots/Namen/Farben, Host-Markierung, Ready, Kick, Ruleset, Standardregeln, Start, Fehler-/Verbindungsstatus.
 
-# 15. Karten-/Bonussystem
+- `V1` Lobby-Code wird über Vermittlungs-/Rendezvous-Dienst registriert, löst Host-Session auf und wird nach Lobby-Ende ungültig.
+- `OFFEN` Farbwahl, Ready-Voraussetzungen, Late Join, Code-Länge/Zeichensatz/Lebensdauer/Kollisionen und Backend-Technik.
 
-- Gebietskarten: `OFFEN`
-- Kartenerhalt: `OFFEN`
-- Kartensets: `OFFEN`
-- Karten eintauschen: `OFFEN`
-- steigende Set-Boni: `OFFEN`
-- Missionskarten: `SPÄTER`
+# 16. Netzwerkmodell
 
-Entscheidung erforderlich, ob Gebietskarten überhaupt Bestandteil von V1 werden.
+- `FIX / V1` Host-authoritative Architektur.
+- `FIX / V1` Clients senden Requests/Intents; Host validiert, verändert State und repliziert Ergebnisse.
+- `FIX` Host validiert Session, Spieler, Zug, Phase, Besitz, Nachbarschaft, Truppen, Verstärkungen, Würfelanzahl, Bewegung und Matchstatus.
+- `OFFEN` Transport/Protokoll, NAT/Relay, Rendezvous-Service, Verschlüsselung, Heartbeat/Ping.
 
-# 16. Lobby
+# 17. Disconnect / Reconnect / AFK
 
-Benötigte Funktionen:
+- `FIX / V1` Reconnect unterstützt.
+- `CONFIG` Reconnect-Frist Default 3 Min.; 1 / 3 / 5 / 10 Min.
+- `FIX` Client-Disconnect: Zugtimer läuft weiter; rechtzeitiger Reconnect stellt bestehenden State wieder her.
+- `FIX` Frist abgelaufen: Spieler dauerhaft verlassen; Territorien/Truppen bleiben bestehen, aber keine aktiven Züge; normal eroberbar.
+- `FIX` Aufgeben mit Bestätigungsdialog; bestätigte laufende Kampfaktion wird zuerst aufgelöst.
+- `FIX` Aufgegebene/eliminierte Spieler dürfen bei aktivem Zuschauer-Modus bleiben.
+- `FIX` Host verlässt Lobby vor Start: Lobby geschlossen.
+- `FIX / V1` Host-Disconnect im Match: Partie pausiert während Reconnect-Frist; kommt Host nicht zurück, Partie beendet.
+- `SPÄTER` Host-Migration.
+- `FIX` Kein separates AFK-System V1; Zugtimer behandelt Inaktivität.
+- `V1` Session-/Reconnect-Token.
 
-- Lobby erstellen
-- Lobby verlassen
-- Invite-Code anzeigen
-- Invite-Code kopieren
-- Invite-Code eingeben
-- Lobby beitreten
-- Spieler anzeigen
-- Spielernamen anzeigen
-- Spielerfarbe anzeigen
-- Host markieren
-- Ready-Status
-- Ready umschalten
-- Spieler kicken
-- Spiel starten
-- Lobby-Fehler anzeigen
+# 18. Autoritativer Game State
 
-Zu definieren:
+Mindestens: Match-ID/-status, Regel-/Protokollversion, eingefrorenes Ruleset, Spieler-ID/Name/Farbe/Status, Zugreihenfolge/Spieler/Runde/Phase/Timer, Territorien/Besitzer/Truppen, Verstärkungen, laufender Kampf, Würfelergebnisse, Karten-Deck/Hände/Ablage, globale Kartenbonus-Stufe, Eroberungsflag, letzte bestätigte Aktion, Gewinner, RNG-Daten soweit erforderlich.
 
-- maximale Lobbygröße: `OFFEN`
-- Farbwahl frei/automatisch: `OFFEN`
-- Host muss Ready sein: `OFFEN`
-- alle Clients müssen Ready sein: `OFFEN`
-- Late Join nach Matchstart: `OFFEN`
+# 19. UI-Screens und UI-Elemente
 
-# 17. Invite-Codes
+Screens: Boot/Splash, Hauptmenü, Spielername, Lobby erstellen/beitreten, Lobby + Ruleset, Laden, Spiel, Pause, Einstellungen, Disconnect/Reconnect, Zuschauer, Sieg/Ergebnis, Fehler.
 
-Zu definieren:
+Elemente: Logo, Menübuttons, Spielername, Invite-Code, Lobby-Slots, Host/Ready/Kick/Verbindung, Ruleset, Weltkarte, Territory Hover/Selected, Besitzerfarbe, Truppenanzahl, Spielerübersicht, Phase/Timer/Verstärkungen, Angriff/Würfel/Kampfergebnis, Kartenhand/Kartenanzahl/Tausch, Eroberungs-/Bewegungsdialog, Bestätigen/Abbrechen/Zugende, Pause/Aufgeben/Verlassen, Reconnect/Zuschauer/Sieg/Fehler/Tooltips.
 
-- Code-Länge: `OFFEN`
-- Zeichensatz: `OFFEN`
-- Groß-/Kleinschreibung: `OFFEN`
-- Lebensdauer: `OFFEN`
-- Kollisionsbehandlung: `OFFEN`
-- Lobby-Code wird serverseitig registriert: `V1`
-- Code löst Verbindung zur Host-Session auf: `V1`
-- Code wird nach Lobby-Ende ungültig: `V1`
+# 20. Assets
 
-# 18. Netzwerkmodell
+Eigenes Logo/App-Icon, Menü-Hintergrund, eigene Weltkarte, Territory-Masks/Grenzen, Regionsgrenzen, Wasser/Verbindungslinien, Truppen-/Spielermarker, Host/Ready/Verbindung/Warnung, Würfel 1–6, Angriff/Verteidigung/Verstärkung/Bewegung, Gebietskartenrahmen und drei Symbole, Joker, Settings/Audio/Kopieren/Zurück/Schließen, Sieg-Grafik, Cursor, UI-Panels/Buttons/Inputs/Checkboxen/Slider, lizenzierte Fonts.
 
-- `FIX / V1` Host-authoritative Architektur
-- `FIX / V1` Ein Spieler ist Host der Game Session
-- `FIX / V1` Clients senden Aktionen/Intents, nicht autoritative State-Änderungen
-- `FIX / V1` Host validiert Aktionen
-- `FIX / V1` Host verändert Game State
-- `FIX / V1` Host repliziert bestätigte Ergebnisse
-- Transport/Protokoll: `OFFEN`
-- NAT-Traversal/Relay: `OFFEN`
-- Rendezvous-/Lobby-Service: `V1`, konkrete Technik `OFFEN`
-- Verschlüsselung: `OFFEN`
-- Heartbeat/Ping: `OFFEN`
+# 21. Audio
 
-# 19. Disconnect / Reconnect
+Menü-/Spielmusik, Button Hover/Click, Lobby Join/Leave, Spielstart, Zugstart, Gebiet auswählen, Truppen platzieren, Angriff, Würfel, Verlust, Eroberung, Karten ziehen/tauschen, Fehler, Benachrichtigung, Sieg, Ausscheiden. Konkrete Assets `OFFEN`.
 
-Zu definieren:
+# 22. Einstellungen / Speicherung
 
-- Reconnect erlaubt: `V1`
-- Reconnect-Frist: `OFFEN`
-- Zug pausiert bei Disconnect: `OFFEN`
-- Zug läuft weiter: `OFFEN`
-- Host-Disconnect: `OFFEN`
-- Host-Migration: `OFFEN`
-- Client-Disconnect: `OFFEN`
-- freiwilliges Verlassen: `OFFEN`
-- Verhalten der Territorien eines endgültig ausgeschiedenen Spielers: `OFFEN`
-- Session-Token für Reconnect: `V1`
+Vorgesehen: Master-/Musik-/Effekt-Lautstärke, Vollbild/Fenster, Auflösung, VSync, UI-Skalierung, Sprache, Spielername. V1-Umfang `OFFEN`.
 
-# 20. Game State
+- `V1` lokale Einstellungen, Spielername und Reconnect-Daten.
+- `OFFEN` Online-Savegame / Autosave.
 
-Der autoritative Game State muss mindestens enthalten:
+# 23. Fehler- und Randfälle
 
-- Match-ID
-- Match-Status
-- Regel-/Protokollversion
-- Spieler
-- Spieler-ID
-- Spielername
-- Spielerfarbe
-- Verbindungsstatus
-- Eliminierungsstatus
-- Zugreihenfolge
-- aktueller Spieler
-- aktuelle Runde
-- aktuelle Phase
-- Territorien
-- Besitzer jedes Territoriums
-- Truppen jedes Territoriums
-- verfügbare Verstärkungen
-- laufender Kampf
-- Würfelergebnisse
-- letzte bestätigte Aktion
-- Gewinner
-- RNG-/Seed-Information soweit technisch erforderlich
+Mindestens testen: doppelte/verspätete/falsch sortierte Aktionen, falscher Spieler/Phase, ungültige Angriffe/Verstärkungen/Bewegungen, Disconnect in jeder Phase, Host-Disconnect, ungültiger/abgelaufener Invite-Code, Lobby voll/Match gestartet, inkompatible Version, ungültiges Reconnect-Token, Aktionen eliminierter Spieler, manipulierte Client-Daten, ungültige Territory-ID, negative/überhöhte Truppenwerte, Kartenpflichttausch nach Eliminierung, Sieg während Aktionsauflösung.
 
-# 21. UI-Screens
+# 24. Security / Validierung
 
-- Boot/Splash
-- Hauptmenü
-- Spielername
-- Lobby erstellen
-- Lobby beitreten
-- Lobby
-- Ladebildschirm
-- Spiel
-- Pause-Menü
-- Einstellungen
-- Disconnect/Reconnect
-- Spieler ausgeschieden
-- Sieg/Ergebnis
-- Fehlerdialog
+Clients dürfen niemals autoritativ festlegen: Würfelergebnis, Truppenverlust, Besitzer, Truppenanzahl, Verstärkungen, Karteninhalt/-ziehung, Kartenbonus-Stufe, Gewinner, Zugwechsel oder Ruleset nach Matchstart.
 
-# 22. UI-Elemente
+# 25. Vorgesehene Godot-Verantwortungsbereiche
 
-- Spiel-Logo
-- Hauptmenü-Hintergrund
-- Spiel erstellen
-- Spiel beitreten
-- Einstellungen
-- Beenden
-- Spielername-Eingabe
-- Invite-Code-Anzeige
-- Invite-Code-Kopieren
-- Invite-Code-Eingabe
-- Beitreten
-- Lobby verlassen
-- Spiel starten
-- Spieler-Slots
-- Spielername
-- Spielerfarbe
-- Host-Markierung
-- Ready-Anzeige
-- Ready-Button
-- Kick-Button
-- Verbindungsstatus
-- Weltkarte
-- Territorium-Hover
-- Territorium-Selected
-- Besitzerfarbe
-- Truppenanzahl
-- aktueller Spieler
-- Spielerübersicht
-- Zugphase
-- verfügbare Verstärkungen
-- Verstärken
-- Angreifen
-- Verschieben
-- Zug beenden
-- Plus
-- Minus
-- Bestätigen
-- Abbrechen
-- Angreifer
-- Verteidiger
-- Würfel
-- Würfeln
-- Kampfergebnis
-- Eroberungsdialog
-- Truppenverschiebungsdialog
-- Pause
-- Fortsetzen
-- Partie verlassen
-- Sieg
-- Fehlermeldung
-- Tooltip
+`GameManager`, `GameState`, `GameRules`, `TurnManager`, `CombatManager`, `ReinforcementManager`, `CardManager`, `MapManager`, `LobbyManager`, `NetworkManager`, `UIManager`, `AudioManager`, `SettingsManager`, `SaveManager`.
 
-# 23. Grafik-/Asset-Liste
+Konkrete Nodes, Autoloads, Resources, RPCs und Signale bleiben `OFFEN` bis die Spezifikation abgeschlossen ist.
 
-- eigenes Logo
-- App-Icon
-- Menü-Hintergrund
-- Karten-Hintergrund
-- Territoriumsflächen/Masks
-- Territoriumsgrenzen
-- Regions-/Kontinentgrenzen
-- Wasser-/Hintergrundgrafik
-- Verbindungslinien
-- Truppenmarker
-- Spieler-/Farbmarker
-- Host-Icon
-- Ready-Icon
-- Würfel 1–6
-- Angriff-Icon
-- Verteidigung-Icon
-- Verstärkung-Icon
-- Bewegung-Icon
-- Einstellungen-Icon
-- Audio-Icons
-- Kopieren-Icon
-- Zurück-Icon
-- Schließen-Icon
-- Warnung-Icon
-- Verbindung-Icon
-- Sieg-Grafik
-- Cursor
-- UI-Panels
-- Buttons
-- Eingabefelder
-- Checkboxen
-- Slider
-- Schriftarten/Lizenzen
-
-# 24. Audio
-
-- Menü-Musik: `OFFEN`
-- Spiel-Musik: `OFFEN`
-- Button Hover
-- Button Click
-- Lobby Join
-- Lobby Leave
-- Spielstart
-- Zugstart
-- Gebiet auswählen
-- Truppen platzieren
-- Angriff
-- Würfel
-- Truppenverlust
-- Gebiet erobert
-- Fehler
-- Benachrichtigung
-- Sieg
-- Niederlage/Ausscheiden
-
-# 25. Einstellungen
-
-- Master-Lautstärke
-- Musik-Lautstärke
-- Effekt-Lautstärke
-- Vollbild/Fenster
-- Auflösung
-- VSync
-- UI-Skalierung
-- Sprache
-- Spielername
-
-Welche Einstellungen Bestandteil von V1 sind: `OFFEN`.
-
-# 26. Speicherung
-
-- lokale Einstellungen: `V1`
-- Spielername: `V1`
-- Audioeinstellungen: `V1`
-- Grafikeinstellungen: `OFFEN`
-- Reconnect-Daten: `V1`
-- Savegame laufender Online-Partien: `OFFEN`
-- Autosave: `OFFEN`
-
-# 27. Fehler- und Randfälle
-
-Vor Implementierung zu definieren/testen:
-
-- Doppelklick / doppelte Aktion
-- doppelt empfangenes Netzwerkpaket
-- verspätete Aktion
-- Aktion in falscher Reihenfolge
-- Aktion eines falschen Spielers
-- Aktion außerhalb der eigenen Phase
-- Angriff auf Nicht-Nachbar
-- Angriff auf eigenes Gebiet
-- Angriff ohne ausreichende Truppen
-- Bewegung ohne ausreichende Truppen
-- ungültige Verstärkungsplatzierung
-- Disconnect während Verstärkung
-- Disconnect während Angriff
-- Disconnect während Würfeln
-- Disconnect während Bewegung
-- Host beendet Spiel
-- Host verliert Internet
-- Client beendet Spiel
-- Client verliert Internet
-- Lobby voll
-- ungültiger Invite-Code
-- abgelaufener Invite-Code
-- Match bereits gestartet
-- inkompatible Spielversion
-- ungültiges Reconnect-Token
-- eliminierter Spieler sendet Aktion
-- gleichzeitig eintreffende Aktionen
-- manipulierte Client-Nachricht
-- ungültiger Territory-Identifier
-- negativer/überhöhter Truppenwert
-- Gewinner wird während laufender Aktion festgestellt
-
-# 28. Security / Host-Validierung
-
-Der Host validiert mindestens:
-
-- Session
-- Spieler-ID
-- aktueller Spieler
-- aktuelle Phase
-- Territoriumsbesitz
-- Nachbarschaft
-- Truppenanzahl
-- Verstärkungsbudget
-- erlaubte Würfelanzahl
-- Bewegung
-- Eliminierungsstatus
-- Matchstatus
-- Aktionsreihenfolge
-
-Clients dürfen niemals selbst autoritativ festlegen:
-
-- Würfelergebnis
-- Truppenverlust
-- Territoriumsbesitzer
-- Truppenanzahl
-- Verstärkungsanzahl
-- Gewinner
-- Zugwechsel
-
-# 29. Godot-Architektur
-
-Vorgesehene Verantwortungsbereiche:
-
-- `GameManager`
-- `GameState`
-- `TurnManager`
-- `CombatManager`
-- `ReinforcementManager`
-- `MapManager`
-- `LobbyManager`
-- `NetworkManager`
-- `UIManager`
-- `AudioManager`
-- `SettingsManager`
-- `SaveManager`
-
-Konkrete Nodes, Autoloads, Resources und Signalstruktur werden erst nach Abschluss der Regelspezifikation festgelegt.
-
-# 30. Vorgesehene Projektstruktur
+# 26. Vorgesehene Projektstruktur
 
 ```text
 res://
@@ -584,6 +277,7 @@ res://
     fonts/
     icons/
     map/
+    cards/
     ui/
   data/
   scenes/
@@ -599,108 +293,58 @@ res://
   tests/
 ```
 
-Status: `OFFEN` bis zur technischen Architekturentscheidung.
+# 27. Naming Conventions
 
-# 31. Naming Conventions
+`OFFEN`: GDScript-Dateien, Szenen, Nodes, Klassen, Signale, RPCs, Konstanten, Enums, Resources, Assets, Territory-IDs, Network Message IDs.
 
-Zu definieren:
+# 28. Release / Build
 
-- GDScript-Dateien
-- Szenen
-- Nodes
-- Klassen
-- Signale
-- RPCs
-- Konstanten
-- Enums
-- Resources
-- Asset-Dateien
-- Territory-IDs
-- Network Message IDs
+- `V1` Windows Export, Debug-/Release-Build, Versionsnummer, Logging.
+- `OFFEN` Crashlogs, ZIP/Installer, Entwicklungs-/Produktionsserver.
+- `SPÄTER` Auto-Updater.
 
-Status: `OFFEN`.
+# 29. Rechtliche / gestalterische Abgrenzung
 
-# 32. Release / Build
+- `FIX` Kein Hasbro/Risiko-Logo oder kommerzielle Brett-/Kartengrafiken/Illustrationen.
+- `FIX` Keine wörtliche Übernahme von Regel-/Kartentexten.
+- `FIX` Eigene UI und eigene bzw. passend lizenzierte Kartenassets.
+- `FIX` Drittanbieter-Assets/Fonts werden lizenzrechtlich dokumentiert.
+- `OFFEN` Finaler öffentlicher Spielname; RisikoLike bleibt Arbeitstitel.
 
-- Windows Export: `V1`
-- Debug Build: `V1`
-- Release Build: `V1`
-- Versionsnummer: `V1`
-- Logging: `V1`
-- Crash-/Fehlerlogs: `OFFEN`
-- ZIP/Installer: `OFFEN`
-- Auto-Updater: `SPÄTER`
-- Entwicklungsserver: `OFFEN`
-- Produktionsserver: `OFFEN`
+# 30. Offene Entscheidungen
 
-# 33. Rechtliche / gestalterische Abgrenzung
+1. Sprache(n) V1
+2. Ziel-Spieldauer
+3. Spielerfarben/Farbauswahl
+4. konkrete 42 Territorien und Namen
+5. Nachbarschaften/Wasserverbindungen
+6. Territory-/Marker-Koordinaten
+7. Zuordnung 14/14/14 Kartensymbole
+8. benutzerdefinierte Starttruppen-Grenzen
+9. fester Kartenbonus
+10. Lobby Ready-Regeln
+11. Late Join
+12. Invite-Code-Format
+13. Netzwerktransport
+14. NAT-/Relay-Lösung
+15. Rendezvous-/Lobby-Service
+16. Verschlüsselung/Heartbeat
+17. V1-Einstellungen
+18. Online-Savegame
+19. konkrete Godot-Architektur
+20. Naming Conventions
+21. Installer/Distribution
 
-- `FIX` Keine Übernahme des Hasbro/Risiko-Logos.
-- `FIX` Keine Übernahme kommerzieller Brett-/Kartengrafiken.
-- `FIX` Keine Übernahme geschützter Illustrationen.
-- `FIX` Keine wörtliche Übernahme von Regel- oder Kartentexten.
-- `FIX` Eigene UI und eigenes visuelles Design.
-- `FIX` Eigene Kartenassets bzw. Assets mit geeigneter Lizenz.
-- `FIX` Drittanbieter-Assets und Fonts müssen lizenzrechtlich geprüft und dokumentiert werden.
-- Projektname `RisikoLike` ist aktuell ein Arbeitstitel; finaler öffentlicher Name: `OFFEN`.
+# 31. Definition of Done — V1
 
-# 34. Offene Entscheidungen — Entscheidungsregister
-
-Diese Punkte müssen vor der jeweiligen Implementierungsphase geschlossen werden:
-
-1. Spielerzahl
-2. Sprache(n)
-3. Ziel-Spieldauer
-4. Siegbedingung V1
-5. konkrete Karte
-6. Territorien und Nachbarschaften
-7. Regionen und Boni
-8. Startgebietsverteilung
-9. Starttruppen
-10. Startspieler/Zugreihenfolge
-11. Verstärkungsformel
-12. Angriffsbedingungen
-13. Würfelregeln
-14. Eroberungsbewegung
-15. Fortification-/Bewegungsregeln
-16. Gebietskarten in V1 ja/nein
-17. AFK-/Turn-Timer
-18. Verhalten bei Aufgabe
-19. Reconnect-Frist
-20. Host-Disconnect/Host-Migration
-21. Invite-Code-Format
-22. Netzwerktransport
-23. NAT-/Relay-Lösung
-24. Rendezvous-Service
-25. Lobby-Ready-Regeln
-26. Late Join
-27. V1-Einstellungen
-28. Online-Savegame
-29. konkrete Godot-Architektur
-30. Naming Conventions
-
-# 35. Definition of Done — V1
-
-V1 gilt erst als abgeschlossen, wenn:
-
-- zwei oder mehr unterstützte Spieler eine private Lobby erstellen und ihr beitreten können;
-- ein Invite-Code zuverlässig zur richtigen Lobby führt;
-- alle Spieler denselben autoritativen Match-State sehen;
-- eine Partie vom Start bis zum Sieg ohne manuelle Eingriffe durchgespielt werden kann;
-- Verstärkung, Angriff, Würfelkampf, Eroberung, Bewegung und Zugwechsel vollständig funktionieren;
-- ungültige Client-Aktionen vom Host abgelehnt werden;
-- definierte Disconnect-/Reconnect-Fälle funktionieren;
-- Sieg und Ausscheiden korrekt erkannt werden;
-- die Anwendung als Windows-Build gestartet werden kann;
-- alle für V1 als `FIX` markierten Regeln implementiert und getestet sind;
-- keine für V1 notwendige Designentscheidung mehr `OFFEN` ist.
+V1 ist abgeschlossen, wenn 2–5 Spieler eine private Lobby per Invite-Code nutzen können; Host-Regeln vor Start konfiguriert und eingefroren werden; alle Clients denselben autoritativen State sehen; eine Partie vollständig bis zur Welteroberung spielbar ist; Startverteilung, Verstärkung, Gebietskarten, Angriff, Würfelkampf, Eroberung, Bewegung und Zugwechsel funktionieren; ungültige Client-Aktionen abgelehnt werden; Timer/Disconnect/Reconnect/Aufgabe funktionieren; Eliminierung/Zuschauer/Sieg korrekt sind; ein Windows-Build startbar ist; alle V1-Regeln getestet sind und keine notwendige V1-Entscheidung mehr `OFFEN` ist.
 
 ---
 
-# Änderungsregel für dieses GDD
+# Änderungsregel
 
-1. Eine `FIX`-Entscheidung wird nicht stillschweigend im Code geändert.
-2. Regeländerungen werden zuerst hier dokumentiert.
-3. Implementierung und Tests folgen anschließend der GDD-Festlegung.
-4. Neue offene Fragen werden in Abschnitt 34 aufgenommen.
-5. Sobald eine offene Frage entschieden ist, wird ihre konkrete Regel im passenden Abschnitt eingetragen und auf `FIX` gesetzt.
+1. `FIX` wird nicht stillschweigend im Code geändert.
+2. `CONFIG` benötigt einen dokumentierten Default.
+3. Regeländerungen zuerst ins GDD, danach Implementierung/Tests.
+4. Neue offene Fragen in Abschnitt 30 aufnehmen.
+5. Nach Matchstart ist das konkrete Ruleset unveränderlich.
