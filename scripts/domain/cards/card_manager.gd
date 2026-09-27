@@ -23,13 +23,14 @@ func initialize_deck() -> void:
 
 func draw_for_player(player_id: String) -> CardState:
 	var player := game_state.get_player(player_id)
-	if player == null or not game_state.ruleset.territory_cards_enabled:
+	if player == null or not game_state.ruleset.territory_cards_enabled or not player.has_conquered_this_turn or player.card_drawn_this_turn:
 		return null
 	if game_state.deck_state.draw_pile.is_empty():
 		_reshuffle_discard()
 	var card := game_state.deck_state.draw_card()
 	if card != null:
 		player.territory_card_ids.append(card.card_id)
+		player.card_drawn_this_turn = true
 	return card
 
 func trade_cards(player_id: String, card_ids: Array[String]) -> Dictionary:

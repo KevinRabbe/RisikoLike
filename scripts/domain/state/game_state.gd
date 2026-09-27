@@ -136,6 +136,7 @@ func _begin_turn_internal() -> void:
 	turn_state.phase = TurnState.Phase.TURN_START
 	var player := get_player(turn_state.active_player_id)
 	player.has_conquered_this_turn = false
+	player.card_drawn_this_turn = false
 	player.fortification_used = false
 	player.pending_trade_reinforcements = 0
 	pending_conquest.clear()

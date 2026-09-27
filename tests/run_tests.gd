@@ -155,6 +155,8 @@ func _test_fortification() -> void:
 	var result := manager.fortify(player_id, "NA_01", "NA_03", 2)
 	_expect(result.accepted, "fortification accepted")
 	_expect_equal(source.army_count, 3, "one fortification leaves one minimum")
+	var second_fortification := manager.fortify(player_id, "NA_01", "NA_03", 1)
+	_expect_equal(second_fortification.code, "FORTIFICATION_ALREADY_USED", "only one fortification is allowed")
 	var adjacent_game := GameState.create_local(2, 41)
 	adjacent_game.ruleset.fortification_mode = Ruleset.FortificationMode.ADJACENT
 	for territory: TerritoryState in adjacent_game.territories.values():
@@ -224,11 +226,13 @@ func _test_cards() -> void:
 	var reshuffle_game := GameState.create_local(2, 52)
 	var reshuffle_processor := CommandProcessor.new(reshuffle_game, RandomSource.new(52))
 	var reshuffle_player_id := reshuffle_game.turn_state.active_player_id
+	reshuffle_game.get_player(reshuffle_player_id).has_conquered_this_turn = true
 	var reshuffle_card_id: String = reshuffle_game.deck_state.cards.keys()[0]
 	reshuffle_game.deck_state.draw_pile.clear()
 	reshuffle_game.deck_state.discard_pile = [reshuffle_card_id]
 	var drawn := reshuffle_processor.card_manager.draw_for_player(reshuffle_player_id)
 	_expect(drawn != null, "discard pile reshuffled when draw pile is empty")
+	_expect(reshuffle_processor.card_manager.draw_for_player(reshuffle_player_id) == null, "only one card can be drawn per turn")
 	var owned_bonus_game := GameState.create_local(2, 53)
 	var owned_bonus_processor := CommandProcessor.new(owned_bonus_game, RandomSource.new(53))
 	var owned_bonus_player_id := owned_bonus_game.turn_state.active_player_id

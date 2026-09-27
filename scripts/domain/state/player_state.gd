@@ -10,6 +10,7 @@ var status: Status = Status.ACTIVE
 var territory_card_ids: Array[String] = []
 var reinforcements_remaining: int = 0
 var has_conquered_this_turn: bool = false
+var card_drawn_this_turn: bool = false
 var fortification_used: bool = false
 var pending_trade_reinforcements: int = 0
 
