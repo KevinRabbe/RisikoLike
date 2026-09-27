@@ -1,0 +1,21 @@
+[project]
+name = "risikolike-backend"
+version = "0.1.0"
+description = "Minimal invite-code rendezvous and WebRTC signaling service for RisikoLike"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.115.12",
+  "uvicorn[standard]==0.34.2",
+  "pydantic==2.11.4",
+]
+
+[project.optional-dependencies]
+test = [
+  "httpx==0.28.1",
+  "pytest==8.3.5",
+  "websockets==15.0.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
