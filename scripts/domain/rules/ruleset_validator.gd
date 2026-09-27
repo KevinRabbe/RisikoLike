@@ -12,6 +12,13 @@ static func validate(ruleset: Ruleset) -> PackedStringArray:
 		errors.append("forced_trade_threshold must be at least 3")
 	if ruleset.owned_territory_card_bonus < 0:
 		errors.append("owned_territory_card_bonus must not be negative")
+	if ruleset.fixed_card_bonus < 0:
+		errors.append("fixed_card_bonus must not be negative")
+	for player_count in range(Ruleset.MIN_PLAYERS, Ruleset.MAX_PLAYERS + 1):
+		if not ruleset.starting_armies_by_player_count.has(player_count):
+			errors.append("missing starting army value for %d players" % player_count)
+		elif int(ruleset.starting_armies_by_player_count[player_count]) < player_count:
+			errors.append("starting armies for %d players are too low" % player_count)
 	if ruleset.progressive_card_values.is_empty():
 		errors.append("progressive_card_values must not be empty")
 	else:
