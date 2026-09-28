@@ -7,6 +7,8 @@ var round_number: int = 1
 var active_player_id: String = ""
 var phase: int = Phase.TURN_START
 var turn_started_at_msec: int = 0
+var turn_deadline_msec: int = 0
+var timer_warning_emitted: bool = false
 
 func phase_name() -> String:
 	return Phase.keys()[phase]

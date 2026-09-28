@@ -44,6 +44,11 @@ static func from_game_state(game_state: GameState, p_viewer_player_id: String = 
 			"card_drawn_this_turn": player.card_drawn_this_turn if player_id == p_viewer_player_id else false,
 			"fortification_used": player.fortification_used if player_id == p_viewer_player_id else false,
 			"pending_trade_reinforcements": player.pending_trade_reinforcements if player_id == p_viewer_player_id else 0,
+			"disconnected_at_msec": player.disconnected_at_msec,
+			"reconnect_deadline_msec": player.reconnect_deadline_msec,
+			"permanently_left_at_msec": player.permanently_left_at_msec,
+			"spectator_mode": player.spectator_mode,
+			"spectator_source_status": player.spectator_source_status,
 		})
 	for territory_id: String in _sorted_keys(game_state.territories):
 		var territory := game_state.get_territory(territory_id)
@@ -57,6 +62,8 @@ static func from_game_state(game_state: GameState, p_viewer_player_id: String = 
 		"active_player_id": game_state.turn_state.active_player_id,
 		"phase": game_state.turn_state.phase,
 		"turn_started_at_msec": game_state.turn_state.turn_started_at_msec,
+		"turn_deadline_msec": game_state.turn_state.turn_deadline_msec,
+		"timer_warning_emitted": game_state.turn_state.timer_warning_emitted,
 	}
 	var card_definitions: Array[Dictionary] = []
 	for card_id: String in _sorted_keys(game_state.deck_state.cards):
@@ -189,6 +196,11 @@ func apply_to_game_state(target: GameState) -> bool:
 			for card_id in card_ids:
 				player.territory_card_ids.append(str(card_id))
 		player.visible_card_count = int(values.get("territory_card_count", player.territory_card_ids.size()))
+		player.disconnected_at_msec = int(values.get("disconnected_at_msec", 0))
+		player.reconnect_deadline_msec = int(values.get("reconnect_deadline_msec", 0))
+		player.permanently_left_at_msec = int(values.get("permanently_left_at_msec", 0))
+		player.spectator_mode = bool(values.get("spectator_mode", false))
+		player.spectator_source_status = int(values.get("spectator_source_status", player.status)) as PlayerState.Status
 		target.players[player_id] = player
 	target.territories.clear()
 	for raw_territory in territories:
@@ -204,6 +216,10 @@ func apply_to_game_state(target: GameState) -> bool:
 	target.turn_state.active_player_id = str(turn.get("active_player_id", ""))
 	target.turn_state.phase = int(turn.get("phase", TurnState.Phase.TURN_START))
 	target.turn_state.turn_started_at_msec = int(turn.get("turn_started_at_msec", 0))
+	target.turn_state.turn_deadline_msec = int(turn.get("turn_deadline_msec", 0))
+	target.turn_state.timer_warning_emitted = bool(turn.get("timer_warning_emitted", false))
+	target._snapshot_clock_anchor_local_msec = target.clock.now_msec()
+	target._snapshot_clock_anchor_authoritative_msec = target.turn_state.turn_started_at_msec
 	target.deck_state = DeckState.new()
 	var card_values: Variant = deck.get("cards", [])
 	if card_values is Array:

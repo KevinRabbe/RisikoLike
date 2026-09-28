@@ -19,6 +19,10 @@ var forced_trade_player_id: String = ""
 var last_action_id: String = ""
 var winner_player_id: String = ""
 var last_result: Dictionary = {}
+var clock: Variant = preload("res://scripts/domain/game_clock.gd").new()
+var last_timeout_reason := ""
+var _snapshot_clock_anchor_local_msec: int = -1
+var _snapshot_clock_anchor_authoritative_msec: int = -1
 
 static func create_local(player_count: int, seed_value: int = 12345, p_ruleset: Ruleset = null) -> GameState:
 	var player_ids: Array[String] = []
@@ -88,8 +92,34 @@ func active_player_ids() -> Array[String]:
 			result.append(player_id)
 	return result
 
+func turn_rotation_player_ids() -> Array[String]:
+	var result: Array[String] = []
+	for player_id: String in players:
+		if get_player(player_id).is_turn_eligible():
+			result.append(player_id)
+	return result
+
+func turn_time_remaining_msec(at_msec: int = -1) -> int:
+	if ruleset == null or ruleset.turn_timer_seconds <= 0 or turn_state.turn_deadline_msec <= 0:
+		return -1
+	var now: int
+	if at_msec >= 0:
+		now = at_msec
+	elif _snapshot_clock_anchor_local_msec >= 0 and _snapshot_clock_anchor_authoritative_msec >= 0:
+		now = _snapshot_clock_anchor_authoritative_msec + (clock.now_msec() - _snapshot_clock_anchor_local_msec)
+	else:
+		now = clock.now_msec()
+	return maxi(0, turn_state.turn_deadline_msec - now)
+
+func is_turn_timer_expired(at_msec: int = -1) -> bool:
+	return turn_time_remaining_msec(at_msec) == 0
+
+func is_turn_timer_warning(at_msec: int = -1) -> bool:
+	var remaining := turn_time_remaining_msec(at_msec)
+	return remaining > 0 and remaining <= 30000
+
 func begin_next_turn() -> bool:
-	var active_ids := active_player_ids()
+	var active_ids := turn_rotation_player_ids()
 	if active_ids.size() < 1:
 		return false
 	var current_index := active_ids.find(turn_state.active_player_id)
@@ -114,7 +144,7 @@ func eliminate_empty_players() -> Array[String]:
 	var eliminated: Array[String] = []
 	for player_id: String in players:
 		var player := get_player(player_id)
-		if player.status == PlayerState.Status.ACTIVE and player.territory_count(self) == 0:
+		if player.is_turn_eligible() and player.territory_count(self) == 0:
 			player.status = PlayerState.Status.ELIMINATED
 			eliminated.append(player_id)
 	return eliminated
@@ -141,7 +171,13 @@ func _choose_starting_player(random: RandomSource) -> void:
 
 func _begin_turn_internal() -> void:
 	turn_state.phase = TurnState.Phase.TURN_START
+	last_timeout_reason = ""
+	turn_state.turn_started_at_msec = clock.now_msec()
+	turn_state.turn_deadline_msec = 0 if ruleset.turn_timer_seconds <= 0 else turn_state.turn_started_at_msec + ruleset.turn_timer_seconds * 1000
+	turn_state.timer_warning_emitted = false
 	var player := get_player(turn_state.active_player_id)
+	if player == null:
+		return
 	player.has_conquered_this_turn = false
 	player.card_drawn_this_turn = false
 	player.fortification_used = false

@@ -17,6 +17,7 @@ const PEER_LEFT := "PEER_LEFT"
 const ERROR := "ERROR"
 const RULESET_REQUEST := "RULESET_REQUEST"
 const RECONNECT_CREDENTIAL := "RECONNECT_CREDENTIAL"
+const SPECTATOR_REQUEST := "SPECTATOR_REQUEST"
 
 static var _known_types: Dictionary = {
 	JOIN_REQUEST: true,
@@ -35,6 +36,7 @@ static var _known_types: Dictionary = {
 	ERROR: true,
 	RULESET_REQUEST: true,
 	RECONNECT_CREDENTIAL: true,
+	SPECTATOR_REQUEST: true,
 }
 
 var message_type: String

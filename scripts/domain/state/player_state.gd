@@ -14,6 +14,11 @@ var has_conquered_this_turn: bool = false
 var card_drawn_this_turn: bool = false
 var fortification_used: bool = false
 var pending_trade_reinforcements: int = 0
+var disconnected_at_msec: int = 0
+var reconnect_deadline_msec: int = 0
+var permanently_left_at_msec: int = 0
+var spectator_mode: bool = false
+var spectator_source_status: Status = Status.ACTIVE
 
 func _init(p_player_id: String = "", p_name: String = "Spieler", p_color: Color = Color.WHITE) -> void:
 	player_id = p_player_id
@@ -25,6 +30,17 @@ func is_active() -> bool:
 
 func can_take_turn() -> bool:
 	return status == Status.ACTIVE
+
+func is_turn_eligible() -> bool:
+	# A temporarily disconnected player remains in rotation. Their authoritative
+	# turn timer continues to run until they reconnect or become permanently left.
+	return status == Status.ACTIVE or status == Status.DISCONNECTED
+
+func is_permanently_left() -> bool:
+	return status == Status.LEFT
+
+func is_spectating() -> bool:
+	return spectator_mode
 
 func territory_count(game_state: GameState) -> int:
 	var count := 0

@@ -5,6 +5,8 @@ var processor: CommandProcessor
 var map_controller: MapController
 var phase_label: Label
 var player_label: Label
+var timer_label: Label
+var status_label: Label
 var reinforcement_label: Label
 var selection_label: Label
 var result_label: Label
@@ -22,6 +24,16 @@ var target_id := ""
 var network_mode := false
 var local_player_id := ""
 var pending_network_action := false
+var surrender_dialog: ConfirmationDialog
+var spectator_button: Button
+
+func _process(_delta: float) -> void:
+	if game_state != null and timer_label != null:
+		_refresh_timer()
+		if not network_mode and processor != null and game_state.status == GameState.MatchStatus.PLAYING:
+			var lifecycle := processor.advance_time(game_state.clock.now_msec())
+			if bool(lifecycle.get("changed", false)):
+				_refresh_ui()
 
 func _ready() -> void:
 	if NetworkManager.has_active_match():
@@ -48,8 +60,14 @@ func _build_ui() -> void:
 	phase_label = Label.new()
 	phase_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_bar.add_child(phase_label)
+	timer_label = Label.new()
+	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	top_bar.add_child(timer_label)
 	player_label = Label.new()
 	top_bar.add_child(player_label)
+	status_label = Label.new()
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	root.add_child(status_label)
 	var content := HBoxContainer.new()
 	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	root.add_child(content)
@@ -120,6 +138,17 @@ func _build_ui() -> void:
 	surrender_button.text = "Aufgeben"
 	surrender_button.pressed.connect(_on_surrender_pressed)
 	side.add_child(surrender_button)
+	surrender_dialog = ConfirmationDialog.new()
+	surrender_dialog.title = "Partie aufgeben"
+	surrender_dialog.dialog_text = "Möchtest du die Partie wirklich aufgeben?"
+	surrender_dialog.ok_button_text = "Aufgeben"
+	surrender_dialog.cancel_button_text = "Abbrechen"
+	surrender_dialog.confirmed.connect(_confirm_surrender)
+	add_child(surrender_dialog)
+	spectator_button = Button.new()
+	spectator_button.text = "Zuschauen"
+	spectator_button.pressed.connect(_on_spectator_pressed)
+	side.add_child(spectator_button)
 	result_label = Label.new()
 	result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	side.add_child(result_label)
@@ -143,7 +172,7 @@ func _build_ui() -> void:
 	side.add_child(hint)
 
 func _on_territory_selected(territory_id: String) -> void:
-	if game_state.status == GameState.MatchStatus.FINISHED:
+	if not _can_local_player_act():
 		return
 	if network_mode and game_state.turn_state.active_player_id != local_player_id:
 		result_label.text = "Du bist nicht am Zug."
@@ -218,7 +247,23 @@ func _on_end_turn_pressed() -> void:
 	_execute(CommandEnvelope.create(_command_player_id(), game_state.state_revision, "end_turn"))
 
 func _on_surrender_pressed() -> void:
+	if _can_local_player_act() and surrender_dialog != null:
+		surrender_dialog.popup_centered()
+
+func _confirm_surrender() -> void:
 	_execute(CommandEnvelope.create(_command_player_id(), game_state.state_revision, "surrender"))
+
+func _on_spectator_pressed() -> void:
+	if game_state == null:
+		return
+	var player_id := NetworkManager.local_player_id if network_mode else game_state.turn_state.active_player_id
+	var result: Dictionary
+	if network_mode:
+		result = NetworkManager.enter_spectator()
+	else:
+		result = processor.enter_spectator(player_id)
+	result_label.text = "Zuschauermodus angefordert." if bool(result.get("ok", false)) else "Abgelehnt: %s" % result.get("code", "SPECTATOR_REJECTED")
+	_refresh_ui()
 
 func _execute(command: CommandEnvelope) -> void:
 	if command == null or command.player_id.is_empty():
@@ -270,6 +315,12 @@ func _on_network_connection_changed(state: String) -> void:
 	_refresh_ui()
 
 func _refresh_ui() -> void:
+	if game_state == null:
+		return
+	if game_state.last_action_id.begins_with("lifecycle-"):
+		source_id = ""
+		target_id = ""
+		pending_network_action = false
 	if map_controller != null:
 		if map_controller.grid == null:
 			map_controller.configure(game_state.map_data, game_state)
@@ -286,11 +337,11 @@ func _refresh_ui() -> void:
 		var listed_player := game_state.get_player(player_id)
 		var player_row := Label.new()
 		var card_count := listed_player.territory_card_ids.size() if not network_mode or player_id == local_player_id else listed_player.visible_card_count
-		player_row.text = "%s  | Gebiete: %d  | Karten: %d%s" % [listed_player.name, listed_player.territory_count(game_state), card_count, "  ← am Zug" if player_id == game_state.turn_state.active_player_id else ""]
+		player_row.text = "%s  | %s | Gebiete: %d  | Karten: %d%s" % [listed_player.name, _player_status_text(listed_player), listed_player.territory_count(game_state), card_count, "  ← am Zug" if player_id == game_state.turn_state.active_player_id else ""]
 		player_panel.add_child(player_row)
 	selection_label.text = "Auswahl: %s -> %s" % [source_id if not source_id.is_empty() else "—", target_id if not target_id.is_empty() else "—"]
 	var reinforcement_phase := game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT
-	var can_act := not network_mode or (NetworkManager.connection_state == "in_game" and game_state.turn_state.active_player_id == local_player_id)
+	var can_act := _can_local_player_act()
 	reset_button.visible = reinforcement_phase
 	trade_button.visible = can_act and (game_state.turn_state.phase == TurnState.Phase.CARD_TRADE or game_state.forced_trade_player_id == game_state.turn_state.active_player_id)
 	if network_mode:
@@ -303,8 +354,20 @@ func _refresh_ui() -> void:
 	end_phase_button.visible = can_act and game_state.turn_state.phase != TurnState.Phase.TURN_END and game_state.status == GameState.MatchStatus.PLAYING
 	end_phase_button.text = "Verstärkungen bestätigen" if reinforcement_phase else "Phase beenden"
 	end_turn_button.visible = can_act and game_state.turn_state.phase == TurnState.Phase.TURN_END
+	var local_player := game_state.get_player(_command_player_id() if not _command_player_id().is_empty() else local_player_id)
+	spectator_button.visible = local_player != null and not local_player.is_spectating() and local_player.status in [PlayerState.Status.SURRENDERED, PlayerState.Status.ELIMINATED, PlayerState.Status.LEFT] and game_state.ruleset.spectating_allowed
 	if game_state.status == GameState.MatchStatus.FINISHED:
-		result_label.text = "Sieg: %s" % game_state.get_player(game_state.winner_player_id).name
+		var winner := game_state.get_player(game_state.winner_player_id)
+		status_label.text = "Partie beendet — Sieg: %s" % (winner.name if winner != null else game_state.winner_player_id)
+	elif game_state.status == GameState.MatchStatus.TERMINATED:
+		status_label.text = "Partie beendet: Host nicht verfügbar."
+	elif network_mode and NetworkManager.connection_state in ["disconnected", "reconnecting", "failed"]:
+		status_label.text = "Verbindung unterbrochen — Timer läuft weiter; Wiederverbinden wird versucht."
+	elif visible_player != null and visible_player.is_spectating():
+		status_label.text = "Zuschauermodus — öffentliche Partieansicht, keine Spielaktionen."
+	else:
+		status_label.text = ""
+	_refresh_timer()
 
 func _find_valid_card_set(card_ids: Array[String]) -> Array[String]:
 	if network_mode:
@@ -336,3 +399,40 @@ func _command_player_id() -> String:
 			return ""
 		return local_player_id
 	return game_state.turn_state.active_player_id if game_state != null else ""
+
+func _can_local_player_act() -> bool:
+	if game_state == null or game_state.status != GameState.MatchStatus.PLAYING:
+		return false
+	var player_id := _command_player_id()
+	var player := game_state.get_player(player_id) if not player_id.is_empty() else null
+	if player == null or not player.can_take_turn():
+		return false
+	if network_mode and NetworkManager.connection_state != "in_game":
+		return false
+	return game_state.turn_state.active_player_id == player_id
+
+func _refresh_timer() -> void:
+	if timer_label == null or game_state == null:
+		return
+	var remaining := game_state.turn_time_remaining_msec()
+	if remaining < 0:
+		timer_label.text = "Zugzeit: deaktiviert"
+		timer_label.modulate = Color.WHITE
+		return
+	var total_seconds := ceili(float(remaining) / 1000.0)
+	timer_label.text = "Zugzeit: %02d:%02d" % [total_seconds / 60, total_seconds % 60]
+	timer_label.modulate = Color("ffb347") if remaining <= 30000 else Color.WHITE
+
+func _player_status_text(player: PlayerState) -> String:
+	if player.is_spectating():
+		return "Zuschauer"
+	match player.status:
+		PlayerState.Status.DISCONNECTED:
+			return "Verbindung verloren"
+		PlayerState.Status.SURRENDERED:
+			return "Aufgegeben"
+		PlayerState.Status.ELIMINATED:
+			return "Eliminiert"
+		PlayerState.Status.LEFT:
+			return "Dauerhaft verlassen"
+	return "Aktiv"

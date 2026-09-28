@@ -32,6 +32,8 @@ var _reconnect_elapsed := 0.0
 var _reconnect_attempts := 0
 var _reconnect_request_pending := false
 var _reconnect_transport_pending := false
+var _host_disconnect_pending := false
+var _host_disconnect_elapsed := 0.0
 var _pending_peer_identities: Dictionary = {}
 var _issued_reconnect_generations: Dictionary = {}
 
@@ -53,6 +55,23 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if transport != null:
 		transport.poll()
+	if role == Role.CLIENT and _host_disconnect_pending and game_state != null:
+		_host_disconnect_elapsed += delta
+		# Let already-buffered reliable data channels deliver the final command
+		# result/snapshot before presenting the terminal host-loss state.
+		if _host_disconnect_elapsed >= 0.25 and game_state.status == GameState.MatchStatus.PLAYING:
+			_host_disconnect_pending = false
+			game_state.status = GameState.MatchStatus.TERMINATED
+			game_state.last_action_id = "host-disconnect"
+			game_state.last_result = {"code": "HOST_UNAVAILABLE"}
+			network_error.emit("HOST_UNAVAILABLE")
+	if role == Role.HOST and game_state != null and command_processor != null and game_state.status == GameState.MatchStatus.PLAYING:
+		var lifecycle := command_processor.advance_time(game_state.clock.now_msec())
+		if bool(lifecycle.get("changed", false)):
+			_broadcast_game_state(NetworkMessage.STATE_SNAPSHOT, game_state.last_action_id)
+			var host_snapshot := snapshot_for_player(local_player_id)
+			if host_snapshot != null:
+				state_snapshot_changed.emit(host_snapshot)
 	if backend_mode and role == Role.HOST:
 		_backend_heartbeat_elapsed += delta
 		if _backend_heartbeat_elapsed >= 15.0:
@@ -347,6 +366,11 @@ func submit_command(command: CommandEnvelope) -> Dictionary:
 	if role == Role.CLIENT:
 		if command.player_id != local_player_id:
 			return {"ok": false, "code": "INVALID_PLAYER"}
+		if game_state.status != GameState.MatchStatus.PLAYING:
+			return {"ok": false, "code": "MATCH_FINISHED" if game_state.status == GameState.MatchStatus.FINISHED else "MATCH_NOT_PLAYING"}
+		var local_player := game_state.get_player(local_player_id)
+		if local_player == null or not local_player.can_take_turn():
+			return {"ok": false, "code": "PLAYER_NOT_ACTIVE"}
 		return {"ok": _send_message(1, NetworkMessage.new(NetworkMessage.COMMAND_REQUEST, {"command": command.to_dict()}, match_id)), "code": "QUEUED"}
 	return {"ok": false, "code": "NOT_CONNECTED"}
 
@@ -354,6 +378,19 @@ func set_ready_state(ready: bool) -> Dictionary:
 	if role != Role.CLIENT or local_player_id.is_empty():
 		return {"ok": false, "code": "NOT_CLIENT"}
 	return {"ok": _send_message(1, NetworkMessage.new(NetworkMessage.READY_CHANGED, {"player_id": local_player_id, "ready": ready}, lobby_id)), "code": "QUEUED"}
+
+func enter_spectator() -> Dictionary:
+	if game_state == null or local_player_id.is_empty():
+		return {"ok": false, "code": "MATCH_NOT_STARTED"}
+	if role == Role.HOST:
+		var host_result := command_processor.enter_spectator(local_player_id)
+		if bool(host_result.get("ok", false)):
+			_broadcast_lobby()
+			_broadcast_game_state(NetworkMessage.STATE_SNAPSHOT)
+		return host_result
+	if role != Role.CLIENT:
+		return {"ok": false, "code": "NOT_CONNECTED"}
+	return {"ok": _send_message(1, NetworkMessage.new(NetworkMessage.SPECTATOR_REQUEST, {"player_id": local_player_id}, match_id)), "code": "QUEUED"}
 
 func configure_ruleset(next_ruleset: Ruleset) -> Dictionary:
 	if role != Role.HOST or lobby_state == null:
@@ -443,7 +480,11 @@ func has_active_match() -> bool:
 func snapshot_for_player(player_id: String = "") -> GameStateSnapshot:
 	if game_state == null:
 		return null
-	return GameStateSnapshot.from_game_state(game_state, player_id if not player_id.is_empty() else local_player_id)
+	var viewer := player_id if not player_id.is_empty() else local_player_id
+	var viewer_state := game_state.get_player(viewer)
+	if viewer_state != null and viewer_state.is_spectating():
+		viewer = ""
+	return GameStateSnapshot.from_game_state(game_state, viewer)
 
 func state_fingerprint(player_id: String = "") -> String:
 	var snapshot := snapshot_for_player(player_id)
@@ -534,6 +575,13 @@ func _on_peer_connected(peer_id: int) -> void:
 		_peer_to_player[peer_id] = player_id
 		_pending_peer_identities.erase(peer_id)
 		_issued_reconnect_generations[player_id] = generation
+		if command_processor != null:
+			var reconnect_result := command_processor.mark_reconnected(player_id)
+			if not bool(reconnect_result.get("ok", false)):
+				if transport is WebRTCNetworkTransport:
+					(transport as WebRTCNetworkTransport).reject_reconnect(peer_id, str(reconnect_result.get("code", "RECONNECT_FAILED")))
+				_pending_peer_identities.erase(peer_id)
+				return
 		lobby_player.network_peer_id = peer_id
 		lobby_player.connection_state = "CONNECTED"
 		_broadcast_lobby()
@@ -550,13 +598,20 @@ func _on_peer_connected(peer_id: int) -> void:
 func _on_peer_disconnected(peer_id: int) -> void:
 	var player_id := str(_peer_to_player.get(peer_id, ""))
 	if not player_id.is_empty() and lobby_state != null and role == Role.HOST:
-		if game_state != null and not match_id.is_empty():
+		if game_state != null and not match_id.is_empty() and game_state.status == GameState.MatchStatus.PLAYING:
 			var lobby_player := lobby_state.get_player(player_id)
 			if lobby_player != null:
 				lobby_player.network_peer_id = 0
 				lobby_player.connection_state = "DISCONNECTED"
 			_peer_to_player.erase(peer_id)
 			_broadcast_lobby()
+			if command_processor != null:
+				command_processor.mark_disconnected(player_id)
+			_broadcast_game_state(NetworkMessage.STATE_SNAPSHOT)
+			peer_changed.emit(player_id, false)
+			return
+		if game_state != null and not match_id.is_empty():
+			_peer_to_player.erase(peer_id)
 			peer_changed.emit(player_id, false)
 			return
 		lobby_state.remove_player(player_id)
@@ -564,6 +619,11 @@ func _on_peer_disconnected(peer_id: int) -> void:
 		_broadcast_lobby()
 		peer_changed.emit(player_id, false)
 	if role == Role.CLIENT and connection_state != "offline" and game_state != null:
+		if peer_id == 1:
+			_host_disconnect_pending = true
+			_host_disconnect_elapsed = 0.0
+			set_connection_state("failed")
+			return
 		_reconnect_elapsed = 0.0
 		_reconnect_attempts = 0
 		_reconnect_request_pending = false
@@ -615,6 +675,8 @@ func _handle_host_message(peer_id: int, message: NetworkMessage) -> void:
 			_handle_command_request(peer_id, message)
 		NetworkMessage.SNAPSHOT_REQUEST:
 			_send_snapshot_to_peer(peer_id, str(_peer_to_player.get(peer_id, "")), NetworkMessage.STATE_SNAPSHOT)
+		NetworkMessage.SPECTATOR_REQUEST:
+			_handle_spectator_request(peer_id, message)
 		NetworkMessage.RULESET_REQUEST:
 			_send_message(peer_id, NetworkMessage.new(NetworkMessage.ERROR, {"code": "NOT_HOST"}, lobby_id))
 		_:
@@ -655,6 +717,8 @@ func _handle_client_message(message: NetworkMessage) -> void:
 			network_error.emit(error_code)
 			if error_code == "LOBBY_CLOSED":
 				shutdown()
+			elif error_code == "MATCH_LEFT":
+				shutdown()
 		_:
 			network_error.emit("UNKNOWN_MESSAGE_TYPE")
 
@@ -682,6 +746,26 @@ func _handle_join_request(peer_id: int, message: NetworkMessage) -> void:
 	_broadcast_lobby()
 	peer_changed.emit(player_id, true)
 	print("[LOBBY] player joined player=%s peer=%d" % [player_id, peer_id])
+
+func _handle_spectator_request(peer_id: int, message: NetworkMessage) -> void:
+	var player_id := str(_peer_to_player.get(peer_id, ""))
+	if player_id.is_empty() or player_id != str(message.payload.get("player_id", "")):
+		_send_message(peer_id, NetworkMessage.new(NetworkMessage.ERROR, {"code": "INVALID_PLAYER"}, match_id))
+		return
+	if command_processor == null:
+		_send_message(peer_id, NetworkMessage.new(NetworkMessage.ERROR, {"code": "MATCH_NOT_STARTED"}, match_id))
+		return
+	var result := command_processor.enter_spectator(player_id)
+	if not bool(result.get("ok", false)):
+		_send_message(peer_id, NetworkMessage.new(NetworkMessage.ERROR, {"code": str(result.get("code", "SPECTATOR_REJECTED"))}, match_id))
+		if str(result.get("code", "")) == "SPECTATOR_DISABLED":
+			_send_message(peer_id, NetworkMessage.new(NetworkMessage.ERROR, {"code": "MATCH_LEFT"}, match_id))
+		return
+	var lobby_player := lobby_state.get_player(player_id) if lobby_state != null else null
+	if lobby_player != null:
+		lobby_player.spectator = true
+	_broadcast_lobby()
+	_broadcast_game_state(NetworkMessage.STATE_SNAPSHOT)
 
 func _handle_ready_request(peer_id: int, message: NetworkMessage) -> void:
 	var player_id := str(_peer_to_player.get(peer_id, ""))
@@ -742,6 +826,8 @@ func _apply_snapshot_message(message: NetworkMessage) -> void:
 		lobby_state.status = LobbyState.Status.IN_GAME
 	var was_reconnecting := _reconnect_transport_pending or connection_state == "reconnecting"
 	_reconnect_transport_pending = false
+	_host_disconnect_pending = false
+	_host_disconnect_elapsed = 0.0
 	_reconnect_request_pending = false
 	_reconnect_elapsed = 0.0
 	_reconnect_attempts = 0
@@ -780,7 +866,7 @@ func _broadcast_game_state(message_type: String, action_id: String = "", result:
 func _send_snapshot_to_peer(peer_id: int, player_id: String, message_type: String, action_id: String = "", result: CommandResult = null) -> void:
 	if game_state == null:
 		return
-	var snapshot := GameStateSnapshot.from_game_state(game_state, player_id)
+	var snapshot := snapshot_for_player(player_id)
 	var payload: Dictionary = {"snapshot": snapshot.to_dict()}
 	if result != null:
 		payload["result"] = result.to_dict()
