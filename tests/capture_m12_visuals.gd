@@ -1,6 +1,6 @@
 extends SceneTree
 
-var output_dir := "C:/Users/kevin/.codex/visualizations/2026/09/27/01a0e495-0936-7c31-89b0-c7aea6192265"
+var output_dir := "user://m12-captures"
 
 func _init() -> void:
 	for argument in OS.get_cmdline_args():
@@ -9,6 +9,7 @@ func _init() -> void:
 	call_deferred("_capture_states")
 
 func _capture_states() -> void:
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(output_dir))
 	var packed_scene: PackedScene = load("res://scenes/game/Game.tscn")
 	var scene: Node = packed_scene.instantiate()
 	get_root().add_child(scene)
