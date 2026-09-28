@@ -2,6 +2,7 @@
 .godot/
 
 # Imported/generated files
+*.import
 *.translation
 *.uid
 

@@ -196,7 +196,7 @@ func _build_ui() -> void:
 	actions.add_child(end_turn_button)
 	var surrender_button := Button.new()
 	surrender_button.text = "Aufgeben"
-	AtlasFrontTheme.apply_icon(surrender_button, "quit", 24)
+	AtlasFrontTheme.apply_icon(surrender_button, "surrender", 24)
 	surrender_button.pressed.connect(_on_surrender_pressed)
 	actions.add_child(surrender_button)
 	surrender_dialog = ConfirmationDialog.new()

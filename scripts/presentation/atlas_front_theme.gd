@@ -1,12 +1,13 @@
 class_name AtlasFrontTheme
 extends RefCounted
 
-const ASSET_ROOT := "res://assets/ui/atlas_front"
+const ASSET_ROOT := "res://assets/ui/atlas_front_final"
+const LEGACY_ASSET_ROOT := "res://assets/ui/atlas_front"
 const MAIN_MENU_BACKGROUND := ASSET_ROOT + "/backgrounds/main_menu_command_room.png"
-const LOBBY_BACKGROUND := ASSET_ROOT + "/backgrounds/lobby_command_room.png"
-const MENU_OVERLAY := ASSET_ROOT + "/backgrounds/menu_dark_overlay.png"
-const RECONNECT_BACKDROP := ASSET_ROOT + "/states/reconnect_backdrop.png"
-const VICTORY_BACKDROP := ASSET_ROOT + "/states/victory_backdrop.png"
+const LOBBY_BACKGROUND := MAIN_MENU_BACKGROUND
+const MENU_OVERLAY := ""
+const RECONNECT_BACKDROP := LEGACY_ASSET_ROOT + "/states/reconnect_backdrop.png"
+const VICTORY_BACKDROP := LEGACY_ASSET_ROOT + "/states/victory_backdrop.png"
 const WORDMARK := ASSET_ROOT + "/branding/atlas_front_wordmark.png"
 const MARK := ASSET_ROOT + "/branding/atlas_front_mark.png"
 

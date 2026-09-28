@@ -1,64 +1,82 @@
-# ATLAS // FRONT Asset Integration Report
+# ATLAS // FRONT Final Asset Integration Report
 
 Status: **PASS**
 
-Die extrahierten Einzelassets aus `assets/ui/atlas_front/` wurden in die bestehende Godot-Präsentationsschicht integriert. Die Integration verändert keine Spielregeln, Netzwerklogik, Backend-/Reconnect-Logik, Timerlogik, Karten-Topologie, Kartenhand oder Audioarchitektur.
+The 48-PNG source-of-truth pack under `assets/ui/atlas_front_final/` is now
+integrated without changing gameplay rules, network architecture, backend
+optionality, reconnect logic, timers, map topology, cards, or audio logic.
 
-## Verwendete Assets
+## Integrated
 
-- `backgrounds/main_menu_command_room.png` für Main Menu und Settings.
-- `backgrounds/lobby_command_room.png` für Create Lobby, Join Lobby, Lobby und die Spielumgebung.
-- `backgrounds/menu_dark_overlay.png` als dezentes Readability-Overlay auf Command-Room-Hintergründen.
-- `branding/atlas_front_wordmark.png` im Main Menu.
-- `branding/atlas_front_mark.png` im Main Menu und in der Game-Topbar.
-- `icons/create_lobby.png`, `join_lobby.png`, `settings.png`, `quit.png`, `connection.png`, `ready.png`, `army.png`, `cards.png`, `warning.png`, `timer.png` und `spectator.png` an den bestehenden realen Buttons.
-- `states/reconnect_backdrop.png` als Hintergrund der dynamischen Reconnect-Anzeige.
-- `states/victory_backdrop.png` als Hintergrund der dynamischen Victory-Anzeige.
+- Final command-room background and branding are used by the menu, settings,
+  lobby, and game presentation.
+- Existing controls use matching final icons where available: lobby, join,
+  settings, ready, copy, start, back, gameplay, cards, dice, audio, and
+  status controls.
+- The Windows project/export app icon points to the final 1024px mark asset.
+- `ocean_grid.png` and `world_underlay.png` are atmospheric map layers only.
+  The 42 territory polygons remain the interactive source of truth, and
+  ownership colors are drawn above both layers.
+- Direct Host/TCP remains the default; no backend requirement was introduced.
 
-Alle verwendeten transparenten Texturen bleiben echte PNG-Alpha-Assets. Die Hintergründe werden aspect-ratio-preserving als Cover gezeichnet; dadurch entstehen bei 1920×1080 und 1280×720 keine ungewollten schwarzen Balken.
+## Retained legacy assets
 
-## Bewusst nicht verwendet
+Only these two files remain under `assets/ui/atlas_front/`:
 
-- `game/world_underlay.png` und `game/ocean_grid.png`: Die bestehende 42-Gebiete-Karte bleibt vollständig dynamisch. Die rasterisierten Rohkarten würden die vorhandene Territory-Geometrie nicht verbessern und könnten bei Skalierung mit Labels oder Nachbarschaften konkurrieren.
-- `decor/*` sowie `misc/*`: Die vorhandenen Panels und HUD-Flächen sind bereits ausreichend lesbar. Die zusätzlichen Dekore würden den gewünschten restrained-Neon-Look eher überladen.
-- Nicht benötigte Icon-Varianten: Es wurden keine Bildflächen als Ersatz für Textlabels oder dynamische Controls eingesetzt.
-- Die beiden ursprünglichen Asset-Sheets werden nicht als Runtime-Assets referenziert.
+- `states/reconnect_backdrop.png`
+- `states/victory_backdrop.png`
 
-## Visuelle Abnahme
+The final 48-asset pack contains no state-backdrop replacements, and these
+files are still used by the existing reconnect/victory UI. Superseded old
+backgrounds, branding, icons, map layers, decor, misc assets, and extraction
+audit files were removed after reference verification.
 
-Geprüfte Zustände:
+## Capture gate
 
-- Main Menu: 1920×1080 und 1280×720
-- Create Lobby, Join Lobby und Lobby
-- Game: 1920×1080 und 1280×720
-- Reinforcement, Attack und Fortification
-- Cards, Timer-Warnzustand und Spectator
-- Reconnecting und Victory
+The M13 capture harness completed with the Windows/OpenGL renderer at both
+resolutions:
 
-Ergebnis: Die Command-Room-Hintergründe, das Branding und die Icons sind sichtbar; die dynamische Karte bleibt dominant; Reconnect/Victory behalten dynamische Texte und Buttons; bei den geprüften Auflösungen wurden keine sichtbaren UI-Überlappungen, Sheet-Reste, dunklen Alpha-Rechtecke oder abgeschnittenen Glows festgestellt.
+- `builds/atlas-front-captures-final-1920/` — 16 PNGs, 1920×1080
+- `builds/atlas-front-captures-final-1280/` — 16 PNGs, 1280×720
 
-## Capture-Artefakte
+Reviewed captures include Main Menu, Lobby, Game, Attack, Cards, Reconnect,
+Victory, and the other existing presentation states. No sheets, black alpha
+boxes, missing final assets, or map ownership regressions were observed.
 
-- 1920×1080: `builds/atlas-front-captures-1920/`
-- 1280×720: `builds/atlas-front-captures-1280/`
+## Asset verification
 
-Die Capture-Hilfe meldete beim 1280×720-Lauf einmal ein Godot-`ObjectDB instance was leaked` beim Prozessende. Es gab dabei keine Laufzeitfehler und keine sichtbare Auswirkung auf die Screenshots; die Warnung betrifft die Capture-Hilfe, nicht die UI-Integration.
+- Final PNGs: **48 / 48**
+- Final manifest: `assets/ui/atlas_front_final/ASSET_MANIFEST.md`
+- `atlas_front_v2`: removed as obsolete generated duplicate pack
+- Runtime references to `atlas_front_v2`: none
 
-## Verifikation
+## Automated verification
 
-- Godot Editor-Parse/Import: erfolgreich.
-- Basis-Regression: `294 passed, 0 failed`.
-- M9: `29 passed, 0 failed`.
-- M10: `27 passed, 0 failed`.
-- M11: `63 passed, 0 failed`.
-- M12: `180 passed, 0 failed`.
-- M13: `14 passed, 0 failed`.
-- M14: `12 passed, 0 failed`.
-- M15: `24 passed, 0 failed`.
-- M16: `8 passed, 0 failed`.
-- TCP-Integration: `9 passed, 0 failed`.
-- Backend-Pytest: `18 passed`.
-- BackendClient Smoke gegen laufendes lokales Backend: `6 passed, 0 failed`.
-- Lokaler Zwei-Prozess-WebRTC Smoke: Host und Client erfolgreich; Revision/Fingerprint identisch (`2263498523`).
+- Base: `294 passed`
+- M9: `29 passed`
+- M10: `27 passed`
+- M11: `63 passed`
+- M12: `180 passed`
+- M13: `14 passed`
+- M14: `12 passed`
+- M15: `24 passed`
+- M16: `8 passed`
+- Direct invite: `15 passed`
+- TCP: `9 passed`
+- Backend pytest: `18 passed`
+- BackendClient: `6 passed`
+- Legacy WebRTC two-process smoke: host/client exit `0`, identical
+  revision/fingerprint
+- Direct Host two-process reconnect: host/client exit `0`, identical
+  revision/fingerprint
+- Direct Host three-process lobby: all three exit `0`
 
-Der temporär gestartete lokale Backend-Prozess wurde nach der Verifikation beendet. Release-Gates, Windows-Export und Push wurden in diesem Integrationslauf nicht gestartet.
+## Windows RC package
+
+- Version: `0.1.0`
+- ZIP: `dist/AtlasFront-0.1.0-windows-x86_64.zip`
+- ZIP size: `78,578,629` bytes
+- SHA-256: `5F640DCC3F135726B6AACF3865210DD574860C0DE69D4A7FF3A009AD515EEC42`
+- Direct dist startup smoke: exit `0`
+- Package audit: no tests, captures, `.env`, secrets, or source dumps; runtime
+  binary, WebRTC DLL, and license notices present.

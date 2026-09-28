@@ -89,7 +89,7 @@ func _build_ui() -> void:
 	content.add_child(actions)
 	var back := Button.new()
 	back.text = "Zurück"
-	AtlasFrontTheme.apply_icon(back, "quit", 24)
+	AtlasFrontTheme.apply_icon(back, "back", 24)
 	back.pressed.connect(_on_back_pressed)
 	actions.add_child(back)
 	var join := Button.new()

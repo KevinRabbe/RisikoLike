@@ -42,7 +42,7 @@ func _build_ui() -> void:
 	root.add_child(invite_label)
 	copy_button = Button.new()
 	copy_button.text = "Invite-Code kopieren"
-	AtlasFrontTheme.apply_icon(copy_button, "connection", 24)
+	AtlasFrontTheme.apply_icon(copy_button, "copy", 24)
 	copy_button.custom_minimum_size = Vector2(0, 44)
 	copy_button.pressed.connect(_on_copy_invite_pressed)
 	root.add_child(copy_button)
@@ -95,7 +95,7 @@ func _build_ui() -> void:
 	actions.add_child(ready_button)
 	start_button = Button.new()
 	start_button.text = "Match starten"
-	AtlasFrontTheme.apply_icon(start_button, "army", 24)
+	AtlasFrontTheme.apply_icon(start_button, "start", 24)
 	start_button.pressed.connect(_on_start_pressed)
 	actions.add_child(start_button)
 	var leave := Button.new()
