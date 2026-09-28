@@ -26,6 +26,8 @@ INVITE_LENGTH = 6
 JOIN_TOKEN_TTL_SECONDS = 60
 LOBBY_TTL_SECONDS = 45
 TURN_CREDENTIAL_TTL_SECONDS = 600
+RECONNECT_WINDOW_SECONDS = 180
+RECONNECT_AUTH_TTL_SECONDS = 30
 MAX_WS_MESSAGE_BYTES = 64 * 1024
 MAX_SDP_BYTES = 64 * 1024
 MAX_ICE_CANDIDATE_BYTES = 16 * 1024
@@ -50,6 +52,15 @@ ERROR_MESSAGES = {
     "RATE_LIMITED": "Too many requests.",
     "SIGNALING_UNAVAILABLE": "Signaling is unavailable.",
     "TURN_UNAVAILABLE": "TURN credentials are unavailable.",
+    "RECONNECT_TOKEN_INVALID": "The reconnect credential is invalid.",
+    "RECONNECT_TOKEN_EXPIRED": "The reconnect credential has expired.",
+    "RECONNECT_TOKEN_REUSED": "The reconnect credential was already rotated.",
+    "RECONNECT_WINDOW_EXPIRED": "The reconnect window has expired.",
+    "PLAYER_ALREADY_CONNECTED": "The player is already connected.",
+    "MATCH_NOT_FOUND": "The match was not found.",
+    "MATCH_FINISHED": "The match has finished.",
+    "HOST_UNAVAILABLE": "The host is unavailable.",
+    "RECONNECT_FAILED": "Reconnect authorization failed.",
     "UNAUTHENTICATED": "Signaling authentication is required.",
     "MESSAGE_TOO_LARGE": "The signaling message is too large.",
     "INTERNAL_ERROR": "An internal error occurred.",
@@ -117,6 +128,18 @@ class TokenRequest(BaseModel):
     host_session_token: Optional[str] = Field(default=None, min_length=1, max_length=256)
 
 
+class ReconnectCredentialRequest(BaseModel):
+    player_id: str = Field(min_length=1, max_length=32)
+
+
+class ReconnectAuthorizeRequest(BaseModel):
+    match_id: str = Field(min_length=1, max_length=128)
+    player_id: str = Field(min_length=1, max_length=32)
+    reconnect_token: str = Field(min_length=1, max_length=256)
+    protocol_version: int
+    game_version: str = Field(min_length=1, max_length=32)
+
+
 class SignalMessage(BaseModel):
     type: str = Field(min_length=1, max_length=64)
     lobby_id: Optional[str] = Field(default=None, max_length=128)
@@ -124,6 +147,9 @@ class SignalMessage(BaseModel):
     game_version: Optional[str] = Field(default=None, max_length=32)
     host_session_token: Optional[str] = Field(default=None, max_length=256)
     join_token: Optional[str] = Field(default=None, max_length=256)
+    reconnect_ticket: Optional[str] = Field(default=None, max_length=256)
+    player_id: Optional[str] = Field(default=None, max_length=32)
+    connection_generation: Optional[int] = None
     target_peer_id: Optional[str] = Field(default=None, max_length=128)
     payload: Optional[Dict[str, Any]] = None
 
@@ -136,11 +162,33 @@ class PendingJoin:
 
 
 @dataclass
+class ReconnectTicket:
+    token_hash: str
+    expires_at: float
+    generation: int
+    used: bool = False
+
+
+@dataclass
+class ReconnectCredential:
+    match_id: str
+    player_id: str
+    token_hash: str
+    expires_at: float
+    generation: int = 1
+    active_peer_id: Optional[str] = None
+    invalidated_token_hashes: set[str] = field(default_factory=set)
+    tickets: Dict[str, ReconnectTicket] = field(default_factory=dict)
+
+
+@dataclass
 class SignalingPeer:
     peer_id: str
     role: str
     websocket: WebSocket
     lobby_id: str
+    player_id: str = ""
+    connection_generation: int = 0
 
 
 @dataclass
@@ -158,6 +206,8 @@ class LobbyRecord:
     pending_join_tokens: Dict[str, PendingJoin] = field(default_factory=dict)
     peers: Dict[str, SignalingPeer] = field(default_factory=dict)
     host_peer_id: Optional[str] = None
+    match_id: str = ""
+    reconnect_credentials: Dict[str, ReconnectCredential] = field(default_factory=dict)
 
     @property
     def guest_peer_count(self) -> int:
@@ -196,12 +246,19 @@ class LobbyRegistry:
     def cleanup(self) -> None:
         now = self.clock()
         for lobby in list(self.lobbies.values()):
-            if lobby.status in {"OPEN", "STARTING", "IN_GAME"} and lobby.expires_at <= now:
+            if lobby.status in {"OPEN", "STARTING"} and lobby.expires_at <= now:
                 lobby.status = "EXPIRED"
                 self.lobbies.pop(lobby.lobby_id, None)
                 self.codes.pop(lobby.invite_code, None)
                 self.retired_codes[lobby.invite_code] = "LOBBY_EXPIRED"
                 LOGGER.info("lobby_expired lobby_id=%s", lobby.lobby_id)
+            elif lobby.status == "IN_GAME" and lobby.expires_at <= now:
+                # Keep the small match metadata record long enough to return a
+                # precise reconnect-window error without retaining gameplay state.
+                lobby.status = "EXPIRED"
+                self.codes.pop(lobby.invite_code, None)
+                self.retired_codes[lobby.invite_code] = "LOBBY_EXPIRED"
+                LOGGER.info("match_reconnect_window_expired lobby_id=%s", lobby.lobby_id)
 
     def _new_invite_code(self) -> str:
         for _ in range(100):
@@ -278,7 +335,7 @@ class LobbyRegistry:
         lobby = self.authenticate_host(lobby_id, token)
         now = self.clock()
         lobby.last_seen_at = now
-        lobby.expires_at = now + LOBBY_TTL_SECONDS
+        lobby.expires_at = now + (RECONNECT_WINDOW_SECONDS if lobby.status == "IN_GAME" else LOBBY_TTL_SECONDS)
         LOGGER.info("lobby_heartbeat lobby_id=%s", lobby_id)
         return lobby
 
@@ -296,8 +353,98 @@ class LobbyRegistry:
         if lobby.status != "OPEN":
             raise BackendError("MATCH_ALREADY_STARTED", 409)
         lobby.status = "IN_GAME"
+        lobby.match_id = lobby.lobby_id
+        lobby.expires_at = self.clock() + RECONNECT_WINDOW_SECONDS
         LOGGER.info("lobby_started lobby_id=%s", lobby_id)
         return lobby
+
+    def issue_reconnect_credential(self, lobby_id: str, token: str, player_id: str) -> tuple[LobbyRecord, str, ReconnectCredential]:
+        lobby = self.authenticate_host(lobby_id, token)
+        if lobby.status != "IN_GAME":
+            raise BackendError("MATCH_ALREADY_STARTED", 409)
+        if not player_id or player_id == "P1":
+            raise BackendError("INVALID_REQUEST")
+        now = self.clock()
+        old = lobby.reconnect_credentials.get(player_id)
+        if old is not None and old.active_peer_id is not None:
+            raise BackendError("PLAYER_ALREADY_CONNECTED", 409)
+        generation = old.generation + 1 if old is not None else 1
+        reconnect_token = _secret()
+        credential = ReconnectCredential(
+            match_id=lobby.match_id or lobby.lobby_id,
+            player_id=player_id,
+            token_hash=_hash_secret(reconnect_token),
+            expires_at=max(lobby.expires_at, now + RECONNECT_WINDOW_SECONDS),
+            generation=generation,
+        )
+        lobby.reconnect_credentials[player_id] = credential
+        lobby.expires_at = max(lobby.expires_at, credential.expires_at)
+        return lobby, reconnect_token, credential
+
+    def authorize_reconnect(
+        self,
+        match_id: str,
+        player_id: str,
+        reconnect_token: str,
+        game_version: str,
+        protocol_version: int,
+    ) -> tuple[LobbyRecord, str, str, ReconnectCredential]:
+        self.cleanup()
+        lobby = self.lobbies.get(match_id)
+        if lobby is None:
+            raise BackendError("MATCH_NOT_FOUND", 404)
+        if lobby.status != "IN_GAME":
+            if lobby.status in {"CLOSED", "EXPIRED"}:
+                raise BackendError("RECONNECT_WINDOW_EXPIRED", 410)
+            raise BackendError("MATCH_NOT_FOUND", 404)
+        _validate_versions(game_version, protocol_version, lobby)
+        credential = lobby.reconnect_credentials.get(player_id)
+        if credential is None:
+            raise BackendError("RECONNECT_TOKEN_INVALID", 401)
+        if credential.active_peer_id is not None:
+            raise BackendError("PLAYER_ALREADY_CONNECTED", 409)
+        if credential.expires_at <= self.clock():
+            raise BackendError("RECONNECT_WINDOW_EXPIRED", 410)
+        supplied_hash = _hash_secret(reconnect_token or "")
+        if supplied_hash != credential.token_hash:
+            if supplied_hash in credential.invalidated_token_hashes:
+                raise BackendError("RECONNECT_TOKEN_REUSED", 401)
+            raise BackendError("RECONNECT_TOKEN_INVALID", 401)
+        credential.invalidated_token_hashes.add(credential.token_hash)
+        new_token = _secret()
+        credential.token_hash = _hash_secret(new_token)
+        credential.generation += 1
+        ticket = _secret()
+        credential.tickets[_hash_secret(ticket)] = ReconnectTicket(
+            token_hash=_hash_secret(ticket),
+            expires_at=self.clock() + RECONNECT_AUTH_TTL_SECONDS,
+            generation=credential.generation,
+        )
+        return lobby, ticket, new_token, credential
+
+    def consume_reconnect_ticket(self, match_id: str, player_id: str, ticket_value: str) -> tuple[LobbyRecord, ReconnectCredential]:
+        self.cleanup()
+        lobby = self.lobbies.get(match_id)
+        if lobby is None:
+            raise BackendError("MATCH_NOT_FOUND", 404)
+        credential = lobby.reconnect_credentials.get(player_id)
+        if credential is None:
+            raise BackendError("RECONNECT_TOKEN_INVALID", 401)
+        ticket_hash = _hash_secret(ticket_value or "")
+        ticket = credential.tickets.get(ticket_hash)
+        if ticket is None:
+            raise BackendError("RECONNECT_TOKEN_INVALID", 401)
+        if ticket.used:
+            raise BackendError("RECONNECT_TOKEN_REUSED", 401)
+        if ticket.expires_at <= self.clock():
+            raise BackendError("RECONNECT_TOKEN_EXPIRED", 401)
+        if credential.active_peer_id is not None:
+            raise BackendError("PLAYER_ALREADY_CONNECTED", 409)
+        ticket.used = True
+        return lobby, credential
+
+    def activate_reconnect_peer(self, credential: ReconnectCredential, peer_id: str) -> None:
+        credential.active_peer_id = peer_id
 
     def consume_join_token(self, lobby_id: str, token: str) -> LobbyRecord:
         self.cleanup()
@@ -328,6 +475,10 @@ class LobbyRegistry:
         peer = lobby.peers.pop(peer_id, None)
         if peer and peer_id == lobby.host_peer_id:
             lobby.host_peer_id = None
+        if peer and peer.player_id:
+            credential = lobby.reconnect_credentials.get(peer.player_id)
+            if credential is not None and credential.active_peer_id == peer_id:
+                credential.active_peer_id = None
         return peer
 
 
@@ -374,7 +525,18 @@ def create_app(registry: Optional[LobbyRegistry] = None) -> FastAPI:
         return JSONResponse(status_code=exc.status_code, content=error_payload(exc.code))
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error_handler(_request: Request, _exc: RequestValidationError) -> JSONResponse:
+    async def validation_error_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
+        LOGGER.warning(
+            "request_validation_failed path=%s fields=%s",
+            _request.url.path,
+            [
+                {
+                    "location": error.get("loc", []),
+                    "type": error.get("type", ""),
+                }
+                for error in exc.errors()
+            ],
+        )
         return JSONResponse(status_code=422, content=error_payload("INVALID_REQUEST"))
 
     @app.middleware("http")
@@ -439,6 +601,47 @@ def create_app(registry: Optional[LobbyRegistry] = None) -> FastAPI:
         lobby = registry.mark_started(lobby_id, _token_from_request(request, body))
         return {"lobby_id": lobby.lobby_id, "status": lobby.status}
 
+    @app.post("/v1/lobbies/{lobby_id}/reconnect-credentials")
+    async def reconnect_credentials(
+        request: Request,
+        lobby_id: str,
+        payload: ReconnectCredentialRequest,
+    ) -> Dict[str, Any]:
+        _ensure_rate(registry, _client_key(request, "reconnect_credential"), limit=60)
+        lobby, reconnect_token, credential = registry.issue_reconnect_credential(
+            lobby_id,
+            _token_from_request(request, None),
+            payload.player_id,
+        )
+        return {
+            "match_id": lobby.match_id or lobby.lobby_id,
+            "player_id": credential.player_id,
+            "reconnect_token": reconnect_token,
+            "generation": credential.generation,
+            "expires_at": _utc_iso(credential.expires_at),
+        }
+
+    @app.post("/v1/matches/reconnect")
+    async def authorize_reconnect(request: Request, payload: ReconnectAuthorizeRequest) -> Dict[str, Any]:
+        _ensure_rate(registry, _client_key(request, "reconnect"), limit=60)
+        lobby, ticket, rotated_token, credential = registry.authorize_reconnect(
+            payload.match_id,
+            payload.player_id,
+            payload.reconnect_token,
+            payload.game_version,
+            payload.protocol_version,
+        )
+        return {
+            "match_id": lobby.match_id or lobby.lobby_id,
+            "player_id": credential.player_id,
+            "reconnect_token": rotated_token,
+            "reconnect_ticket": ticket,
+            "generation": credential.generation,
+            "expires_at": _utc_iso(credential.expires_at),
+            "signaling_url": signaling_url(request),
+            "ice_servers": app.state.ice_servers,
+        }
+
     @app.post("/v1/lobbies/{lobby_id}/turn-credentials")
     async def turn_credentials(request: Request, lobby_id: str, body: Optional[TokenRequest] = None) -> Dict[str, Any]:
         _ensure_rate(registry, _client_key(request, "turn"), limit=30)
@@ -473,7 +676,7 @@ def create_app(registry: Optional[LobbyRegistry] = None) -> FastAPI:
                     continue
                 msg_type = message.type.upper()
                 if peer is None:
-                    if msg_type not in {"AUTH_HOST", "AUTH_JOIN"}:
+                    if msg_type not in {"AUTH_HOST", "AUTH_JOIN", "AUTH_RECONNECT"}:
                         await websocket.send_json({"type": "AUTH_ERROR", **error_payload("UNAUTHENTICATED")})
                         continue
                     if not message.lobby_id:
@@ -491,26 +694,61 @@ def create_app(registry: Optional[LobbyRegistry] = None) -> FastAPI:
                             if lobby.host_peer_id is not None:
                                 raise BackendError("SIGNALING_UNAVAILABLE", 409)
                             peer = SignalingPeer(uuid.uuid4().hex, "host", websocket, lobby.lobby_id)
-                        else:
+                        elif msg_type == "AUTH_JOIN":
                             lobby = registry.lobbies.get(message.lobby_id)
                             if lobby is None:
                                 raise BackendError("LOBBY_NOT_FOUND", 404)
                             lobby = registry.consume_join_token(message.lobby_id, message.join_token or "")
                             peer = SignalingPeer(uuid.uuid4().hex, "guest", websocket, lobby.lobby_id)
+                        else:
+                            if not message.player_id or message.connection_generation is None:
+                                raise BackendError("INVALID_REQUEST")
+                            lobby, credential = registry.consume_reconnect_ticket(
+                                message.lobby_id,
+                                message.player_id,
+                                message.reconnect_ticket or "",
+                            )
+                            if lobby.host_peer_id is None or lobby.host_peer_id not in lobby.peers:
+                                raise BackendError("HOST_UNAVAILABLE", 503)
+                            if credential.generation != int(message.connection_generation):
+                                raise BackendError("RECONNECT_FAILED", 409)
+                            peer = SignalingPeer(
+                                uuid.uuid4().hex,
+                                "reconnect",
+                                websocket,
+                                lobby.lobby_id,
+                                credential.player_id,
+                                credential.generation,
+                            )
+                            registry.activate_reconnect_peer(credential, peer.peer_id)
                         registry.add_peer(lobby, peer)
                     except BackendError as exc:
                         await websocket.send_json({"type": "AUTH_ERROR", **error_payload(exc.code)})
                         continue
-                    await websocket.send_json({"type": "AUTH_OK", "peer_id": peer.peer_id, "lobby_id": lobby.lobby_id})
+                    auth_ok = {"type": "AUTH_OK", "peer_id": peer.peer_id, "lobby_id": lobby.lobby_id}
+                    if peer.player_id:
+                        auth_ok["player_id"] = peer.player_id
+                        auth_ok["connection_generation"] = peer.connection_generation
+                    await websocket.send_json(auth_ok)
                     if peer.role == "guest" and lobby.host_peer_id and lobby.host_peer_id in lobby.peers:
                         await _send(lobby.peers[lobby.host_peer_id].websocket, {"type": "PEER_JOINING", "peer_id": peer.peer_id})
+                    elif peer.role == "reconnect" and lobby.host_peer_id and lobby.host_peer_id in lobby.peers:
+                        await _send(
+                            lobby.peers[lobby.host_peer_id].websocket,
+                            {
+                                "type": "PEER_RECONNECTING",
+                                "peer_id": peer.peer_id,
+                                "player_id": peer.player_id,
+                                "connection_generation": peer.connection_generation,
+                            },
+                        )
                     continue
                 if msg_type == "PING":
                     await websocket.send_json({"type": "PONG"})
                 elif msg_type == "SIGNALING_CLOSE":
                     await websocket.close(code=1000)
                     return
-                elif msg_type in {"WEBRTC_OFFER", "WEBRTC_ANSWER", "ICE_CANDIDATE"}:
+                elif msg_type in {"WEBRTC_OFFER", "WEBRTC_ANSWER", "ICE_CANDIDATE", "RECONNECT_REJECTED"}:
                     payload = message.payload or {}
                     payload_size = len(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
                     limit = MAX_ICE_CANDIDATE_BYTES if msg_type == "ICE_CANDIDATE" else MAX_SDP_BYTES
