@@ -372,7 +372,7 @@ Zwei PCs in unterschiedlichen normalen Heimnetzwerken können per Invite-Code ei
 
 # M9 — Full Multiplayer Game Loop
 
-> **Status:** Abgeschlossen — vollständiger host-autoritärer 2-Spieler-WebRTC-Full-Match inklusive Kartenhandel, Würfeln, Eroberung, Fortifikation, Kartenziehen, Eliminierung, Aufgabe und Sieg über zwei getrennte Prozesse validiert. Die M8-Manual-Gates für getrennte Netzwerke und erzwungenes TURN bleiben offen; M10 wird bewusst nicht gestartet.
+> **Status:** Abgeschlossen — vollständiger host-autoritärer 2-Spieler-WebRTC-Full-Match inklusive Kartenhandel, Würfeln, Eroberung, Fortifikation, Kartenziehen, Eliminierung, Aufgabe und Sieg über zwei getrennte Prozesse validiert. Die M8-Manual-Gates für getrennte Netzwerke und erzwungenes TURN bleiben offen.
 
 ## Ziel
 
@@ -403,6 +403,8 @@ Danach 3–5 Spieler testen.
 
 # M10 — Disconnect & Reconnect
 
+> **Status:** Abgeschlossen — Backend-Credentials mit Rotation/Replay-Schutz, host-autoritatives State-Preservation, player-spezifischer Snapshot-Recovery und ein echter lokaler Zwei-Prozess-WebRTC-Hard-Drop-Harness mit zwei Reconnect-Generationen sind grün. M8-Real-Network/TURN-Manual-Gates bleiben offen; M11 ist nicht gestartet.
+
 ## Ziel
 
 Verbindungsabbrüche zerstören die Partie nicht sofort.
@@ -425,7 +427,7 @@ Verbindungsabbrüche zerstören die Partie nicht sofort.
 
 ## Done
 
-Client kann während laufender Partie Netzwerk verlieren, neu verbinden und mit korrektem State weiterspielen.
+Client kann während laufender Partie Netzwerk verlieren, innerhalb der Grace Period über eine neue WebRTC-Verbindung authentifiziert werden und mit korrektem player-spezifischem State weiterspielen. Verifiziert sind unter anderem partielle Reinforcement, Pending Conquest, Fortification, Privacy, ungültige Conquest, zwei aufeinanderfolgende Reconnects sowie Abschluss bis zum Harness-Ende.
 
 ---
 

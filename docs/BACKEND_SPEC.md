@@ -137,6 +137,30 @@ Regeln:
 - wird nach erfolgreichem Join vom autoritativen Host einer `player_id` zugeordnet
 - dient zum Wiederverbinden mit derselben logischen Spieleridentität
 - Invite-Code allein reicht niemals für Reconnect
+- wird serverseitig nur als Hash gespeichert und bei erfolgreicher Autorisierung rotiert
+- alte Generationen werden invalidiert; ein Replay ist kein neuer Login
+- Token und Match-/Player-Bindung werden niemals geloggt
+
+### Reconnect-Flow
+
+Nach Matchstart fordert der Host pro Gastspieler ein eigenes Reconnect-Credential an:
+
+```text
+POST /v1/lobbies/{lobby_id}/reconnect-credentials
+Authorization: Bearer <host_session_token>
+{ "player_id": "P2" }
+```
+
+Der Token wird genau einmal im Backend-Response an den Host geliefert und anschließend über den autoritativen Host an den passenden Spieler weitergereicht. Der Client autorisiert eine neue Verbindung über:
+
+```text
+POST /v1/matches/reconnect
+{ "match_id": "...", "player_id": "P2", "reconnect_token": "...", "protocol_version": 1, "game_version": "0.1.0-dev" }
+```
+
+Die Antwort enthält einen einmaligen kurzlebigen Signaling-Ticket, einen rotierten Reconnect-Token und eine inkrementierte Connection-Generation. Das Ticket wird nur für `AUTH_RECONNECT` am Signaling-WebSocket akzeptiert. Ein bereits aktiver Slot wird nicht übernommen; der Host bleibt die einzige Game-State-Autorität.
+
+Die lokale V1-Implementierung hält Match-/Reconnect-Metadaten im Backend-Prozessspeicher. Ein Backend-Neustart invalidiert deshalb aktive Reconnect-Credentials; ein persistenter Session-Store ist außerhalb dieses Meilensteins.
 
 ## 6. Token-Lebensdauer
 
@@ -441,6 +465,15 @@ MATCH_ALREADY_STARTED
 INVALID_TOKEN
 TOKEN_EXPIRED
 TOKEN_ALREADY_USED
+RECONNECT_TOKEN_INVALID
+RECONNECT_TOKEN_EXPIRED
+RECONNECT_TOKEN_REUSED
+RECONNECT_WINDOW_EXPIRED
+PLAYER_ALREADY_CONNECTED
+MATCH_NOT_FOUND
+MATCH_FINISHED
+HOST_UNAVAILABLE
+RECONNECT_FAILED
 VERSION_MISMATCH
 PROTOCOL_MISMATCH
 RATE_LIMITED

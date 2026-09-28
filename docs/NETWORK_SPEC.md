@@ -239,6 +239,10 @@ result/error_code
 - `CONFIG` Reconnect-Frist Default 3 Minuten.
 - `FIX` Nach Reconnect vollständiger Host-Snapshot.
 - `FIX` Client verwirft spekulativen lokalen State.
+- `FIX` Jede erfolgreiche Reconnect-Autorisierung rotiert Credential und Connection-Generation.
+- `FIX` Ein aktiver Spieler-Slot darf nicht durch eine zweite Verbindung übernommen werden.
+- `FIX` Snapshot enthält nur die Sicht des authentifizierten Spielers; fremde Karten-IDs bleiben verborgen.
+- `FIX` Reconnect-Tickets sind vom Invite-/Join-Token getrennt und nur einmal für Signaling verwendbar.
 
 ## 15. Disconnect
 
@@ -252,10 +256,9 @@ result/error_code
 
 ### Host
 
-- Partie pausiert.
-- Host erhält Reconnect-Frist.
-- Rückkehr -> Partie fortsetzen.
-- Keine Rückkehr -> Partie endet in V1.
+- Der Host bleibt in V1 die autoritative Instanz; Host-Migration ist nicht Teil dieses Meilensteins.
+- Bei nicht erreichbarem Host wird ein Reconnect am Signaling-Gateway mit `HOST_UNAVAILABLE` abgewiesen.
+- Host-Verlust beendet die V1-Partie statt einen zweiten autoritativen State zu erzeugen.
 - `SPÄTER` Host Migration.
 
 ## 16. Sicherheit
