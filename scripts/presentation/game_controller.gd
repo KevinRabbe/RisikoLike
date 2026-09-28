@@ -65,7 +65,7 @@ func _build_ui() -> void:
 	top_bar_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	top_bar_panel.offset_left = 20
 	top_bar_panel.offset_top = 16
-	top_bar_panel.offset_right = -20
+	top_bar_panel.offset_right = -312
 	top_bar_panel.offset_bottom = 86
 	add_child(top_bar_panel)
 	var top_bar := HBoxContainer.new()
@@ -91,7 +91,7 @@ func _build_ui() -> void:
 	content.offset_left = 20
 	content.offset_top = 100
 	content.offset_right = -20
-	content.offset_bottom = -212
+	content.offset_bottom = -126
 	add_child(content)
 	map_controller = MapController.new()
 	map_controller.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -99,22 +99,22 @@ func _build_ui() -> void:
 	content.add_child(map_controller)
 	var side_panel := PanelContainer.new()
 	side_panel.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
-	side_panel.offset_left = -326
+	side_panel.offset_left = -292
 	side_panel.offset_right = -6
 	side_panel.offset_top = 12
-	side_panel.offset_bottom = -212
+	side_panel.offset_bottom = -126
 	add_child(side_panel)
 	var side := VBoxContainer.new()
 	side.add_theme_constant_override("separation", 9)
 	side_panel.add_child(side)
 	var title := Label.new()
-	title.text = "TACTICAL OVERVIEW"
-	title.add_theme_font_size_override("font_size", 24)
+	title.text = "PLAYERS // LIVE"
+	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", AtlasFrontTheme.CYAN_SOFT)
 	side.add_child(title)
 	var players_title := Label.new()
-	players_title.text = "PLAYERS // STATUS"
-	players_title.add_theme_font_size_override("font_size", 18)
+	players_title.text = "MATCH STATUS"
+	players_title.add_theme_font_size_override("font_size", 15)
 	side.add_child(players_title)
 	player_panel = VBoxContainer.new()
 	side.add_child(player_panel)
@@ -150,7 +150,7 @@ func _build_ui() -> void:
 	var action_bar_panel := PanelContainer.new()
 	action_bar_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	action_bar_panel.offset_left = 20
-	action_bar_panel.offset_top = -202
+	action_bar_panel.offset_top = -116
 	action_bar_panel.offset_right = -20
 	action_bar_panel.offset_bottom = -18
 	add_child(action_bar_panel)
@@ -196,15 +196,21 @@ func _build_ui() -> void:
 	spectator_button.text = "Zuschauen"
 	spectator_button.pressed.connect(_on_spectator_pressed)
 	actions.add_child(spectator_button)
+	var info_row := HBoxContainer.new()
+	info_row.add_theme_constant_override("separation", 12)
+	action_bar.add_child(info_row)
 	result_label = Label.new()
 	result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	result_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	action_bar.add_child(result_label)
+	result_label.custom_minimum_size.y = 24
+	info_row.add_child(result_label)
 	status_label = Label.new()
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	status_label.add_theme_color_override("font_color", AtlasFrontTheme.CYAN_SOFT)
-	action_bar.add_child(status_label)
+	info_row.add_child(status_label)
 	var zoom_row := HBoxContainer.new()
+	zoom_row.add_theme_constant_override("separation", 4)
 	var zoom_out_button := Button.new()
 	zoom_out_button.text = "Karte −"
 	zoom_out_button.pressed.connect(_on_zoom_out_pressed)
@@ -217,12 +223,7 @@ func _build_ui() -> void:
 	zoom_in_button.text = "Karte +"
 	zoom_in_button.pressed.connect(_on_zoom_in_pressed)
 	zoom_row.add_child(zoom_in_button)
-	action_bar.add_child(zoom_row)
-	var hint := Label.new()
-	hint.text = "Gebiet anklicken: Verstärken = Gebiet, Angriff/Fortification = Quelle dann Ziel."
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.add_theme_color_override("font_color", AtlasFrontTheme.TEXT_MUTED)
-	action_bar.add_child(hint)
+	info_row.add_child(zoom_row)
 	_build_lifecycle_overlays()
 
 func _build_lifecycle_overlays() -> void:
@@ -433,7 +434,7 @@ func _refresh_ui() -> void:
 	var visible_player := game_state.get_player(_command_player_id()) if not _command_player_id().is_empty() else active_player
 	phase_label.text = "Phase: %s | Runde %d | Revision %d" % [game_state.turn_state.phase_name(), game_state.turn_state.round_number, game_state.state_revision]
 	player_label.text = "Am Zug: %s%s" % [active_player.name, " | Du: %s" % visible_player.name if network_mode and visible_player != null else ""]
-	reinforcement_label.text = "Eigene Verstärkungen: %d | Eigene Karten: %d" % [visible_player.reinforcements_remaining if visible_player != null else 0, visible_player.territory_card_ids.size() if visible_player != null else 0]
+	reinforcement_label.text = "VERSTÄRKUNG %d  ·  KARTEN %d" % [visible_player.reinforcements_remaining if visible_player != null else 0, visible_player.territory_card_ids.size() if visible_player != null else 0]
 	card_summary_label.text = _card_summary(visible_player)
 	for child in player_panel.get_children():
 		child.queue_free()
@@ -444,7 +445,7 @@ func _refresh_ui() -> void:
 		player_row.text = "%s  ·  %s\nGebiete %d  ·  Karten %d%s" % [listed_player.name, _player_status_text(listed_player), listed_player.territory_count(game_state), card_count, "  ·  AM ZUG" if player_id == game_state.turn_state.active_player_id else ""]
 		player_row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		player_panel.add_child(player_row)
-	selection_label.text = "Auswahl: %s -> %s" % [source_id if not source_id.is_empty() else "—", target_id if not target_id.is_empty() else "—"]
+	selection_label.text = "AUSWAHL  %s → %s" % [source_id if not source_id.is_empty() else "—", target_id if not target_id.is_empty() else "—"]
 	var reinforcement_phase := game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT
 	var can_act := _can_local_player_act()
 	reset_button.visible = reinforcement_phase

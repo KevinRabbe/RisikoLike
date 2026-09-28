@@ -57,6 +57,7 @@ func _capture_game_states() -> void:
 	await _capture("timer-warning.png")
 	controller._on_network_connection_changed("reconnecting")
 	await _capture("reconnecting.png")
+	controller._on_network_connection_changed("in_game")
 	game_state.get_player("P1").spectator_mode = true
 	game_state.get_player("P1").spectator_source_status = PlayerState.Status.SURRENDERED
 	controller._refresh_ui()

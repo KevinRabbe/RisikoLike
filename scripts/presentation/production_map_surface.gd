@@ -52,11 +52,28 @@ func set_render_zoom(value: float) -> void:
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, MAP_SIZE), OCEAN)
+	_draw_land_underlay()
 	_draw_grid()
 	_draw_region_labels()
 	_draw_water_connections()
 	for territory_id: String in visuals:
 		_draw_territory(territory_id, visuals[territory_id] as TerritoryVisualDefinition)
+
+func _draw_land_underlay() -> void:
+	# Visual coast/continent silhouettes only. Territory polygons, hitboxes and
+	# adjacency remain entirely defined by MapVisualDefinition and MapData.
+	var silhouettes := [
+		PackedVector2Array([Vector2(86, 116), Vector2(268, 76), Vector2(488, 128), Vector2(536, 244), Vector2(422, 332), Vector2(246, 300), Vector2(124, 236)]),
+		PackedVector2Array([Vector2(390, 342), Vector2(520, 388), Vector2(596, 566), Vector2(528, 758), Vector2(418, 664), Vector2(370, 492)]),
+		PackedVector2Array([Vector2(650, 168), Vector2(822, 122), Vector2(1002, 176), Vector2(1068, 332), Vector2(954, 454), Vector2(742, 426), Vector2(636, 302)]),
+		PackedVector2Array([Vector2(958, 152), Vector2(1250, 102), Vector2(1460, 188), Vector2(1518, 356), Vector2(1356, 474), Vector2(1112, 414), Vector2(1000, 302)]),
+		PackedVector2Array([Vector2(1156, 550), Vector2(1342, 534), Vector2(1462, 622), Vector2(1388, 732), Vector2(1190, 708), Vector2(1108, 628)])
+	]
+	for silhouette: PackedVector2Array in silhouettes:
+		draw_colored_polygon(silhouette, Color(AtlasFrontTheme.CYAN, 0.045))
+		var closed := PackedVector2Array(silhouette)
+		closed.append(silhouette[0])
+		draw_polyline(closed, Color(AtlasFrontTheme.CYAN, 0.11), 2.0, true)
 
 func _draw_grid() -> void:
 	for x in range(0, int(MAP_SIZE.x) + 1, 80):

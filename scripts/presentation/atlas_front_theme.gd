@@ -15,7 +15,7 @@ const SUCCESS := Color("#75e0a1")
 
 static func create_theme() -> Theme:
 	var theme := Theme.new()
-	theme.default_font_size = 16
+	theme.default_font_size = 17
 	for type_name in ["Label", "Button", "LineEdit", "SpinBox", "OptionButton", "CheckButton", "HSlider"]:
 		theme.set_color("font_color", type_name, TEXT)
 		theme.set_color("font_hover_color", type_name, Color.WHITE)
