@@ -21,7 +21,7 @@ class FakeClock:
 def _create(client: TestClient) -> dict[str, Any]:
     response = client.post(
         "/v1/lobbies",
-        json={"game_version": "0.1.0-dev", "protocol_version": 1, "max_players": 2},
+        json={"game_version": "0.1.0", "protocol_version": 1, "max_players": 2},
     )
     assert response.status_code == 200
     return response.json()
@@ -64,7 +64,7 @@ def test_reconnect_token_binding_rotation_and_replay() -> None:
             "player_id": "P2",
             "reconnect_token": issued["reconnect_token"],
             "protocol_version": 1,
-            "game_version": "0.1.0-dev",
+            "game_version": "0.1.0",
         },
     )
     assert authorized.status_code == 200, authorized.text
@@ -79,7 +79,7 @@ def test_reconnect_token_binding_rotation_and_replay() -> None:
             "player_id": "P2",
             "reconnect_token": issued["reconnect_token"],
             "protocol_version": 1,
-            "game_version": "0.1.0-dev",
+            "game_version": "0.1.0",
         },
     )
     assert replay.status_code == 401
@@ -92,7 +92,7 @@ def test_reconnect_token_binding_rotation_and_replay() -> None:
             "player_id": "P3",
             "reconnect_token": rotated["reconnect_token"],
             "protocol_version": 1,
-            "game_version": "0.1.0-dev",
+            "game_version": "0.1.0",
         },
     )
     assert wrong_player.status_code == 401
@@ -105,7 +105,7 @@ def test_reconnect_token_binding_rotation_and_replay() -> None:
             "player_id": "P2",
             "reconnect_token": rotated["reconnect_token"],
             "protocol_version": 1,
-            "game_version": "0.1.0-dev",
+            "game_version": "0.1.0",
         },
     )
     assert wrong_match.status_code == 404
@@ -125,7 +125,7 @@ def test_active_reconnect_slot_is_not_taken_over() -> None:
             "player_id": "P2",
             "reconnect_token": issued["reconnect_token"],
             "protocol_version": 1,
-            "game_version": "0.1.0-dev",
+            "game_version": "0.1.0",
         },
     ).json()
     with client.websocket_connect("/v1/signaling") as host:
@@ -134,7 +134,7 @@ def test_active_reconnect_slot_is_not_taken_over() -> None:
             "lobby_id": created["lobby_id"],
             "host_session_token": created["host_session_token"],
             "protocol_version": 1,
-            "game_version": "0.1.0-dev",
+            "game_version": "0.1.0",
         })
         assert host.receive_json()["type"] == "AUTH_OK"
         with client.websocket_connect("/v1/signaling") as reconnect:
@@ -145,7 +145,7 @@ def test_active_reconnect_slot_is_not_taken_over() -> None:
                 "player_id": "P2",
                 "connection_generation": authorized["generation"],
                 "protocol_version": 1,
-                "game_version": "0.1.0-dev",
+                "game_version": "0.1.0",
             })
             assert reconnect.receive_json()["type"] == "AUTH_OK"
             assert host.receive_json()["type"] == "PEER_RECONNECTING"
@@ -156,7 +156,7 @@ def test_active_reconnect_slot_is_not_taken_over() -> None:
                     "player_id": "P2",
                     "reconnect_token": authorized["reconnect_token"],
                     "protocol_version": 1,
-                    "game_version": "0.1.0-dev",
+                    "game_version": "0.1.0",
                 },
             )
             assert takeover.status_code == 409
@@ -179,7 +179,7 @@ def test_reconnect_window_expiry_and_secret_safe_logging(caplog) -> None:
             "player_id": "P2",
             "reconnect_token": issued["reconnect_token"],
             "protocol_version": 1,
-            "game_version": "0.1.0-dev",
+            "game_version": "0.1.0",
         },
     )
     assert expired.status_code == 410
@@ -200,7 +200,7 @@ def test_reconnect_signaling_rejects_unavailable_host() -> None:
             "player_id": "P2",
             "reconnect_token": issued["reconnect_token"],
             "protocol_version": 1,
-            "game_version": "0.1.0-dev",
+            "game_version": "0.1.0",
         },
     ).json()
     with client.websocket_connect("/v1/signaling") as reconnect:
@@ -211,7 +211,7 @@ def test_reconnect_signaling_rejects_unavailable_host() -> None:
             "player_id": "P2",
             "connection_generation": authorized["generation"],
             "protocol_version": 1,
-            "game_version": "0.1.0-dev",
+            "game_version": "0.1.0",
         })
         error = reconnect.receive_json()
         assert error["type"] == "AUTH_ERROR"
@@ -238,7 +238,7 @@ def test_match_heartbeat_does_not_shorten_reconnect_window() -> None:
             "player_id": "P2",
             "reconnect_token": issued["reconnect_token"],
             "protocol_version": 1,
-            "game_version": "0.1.0-dev",
+            "game_version": "0.1.0",
         },
     )
     assert authorized.status_code == 200, authorized.text

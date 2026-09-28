@@ -155,7 +155,7 @@ Der Token wird genau einmal im Backend-Response an den Host geliefert und anschl
 
 ```text
 POST /v1/matches/reconnect
-{ "match_id": "...", "player_id": "P2", "reconnect_token": "...", "protocol_version": 1, "game_version": "0.1.0-dev" }
+{ "match_id": "...", "player_id": "P2", "reconnect_token": "...", "protocol_version": 1, "game_version": "0.1.0" }
 ```
 
 Die Antwort enthält einen einmaligen kurzlebigen Signaling-Ticket, einen rotierten Reconnect-Token und eine inkrementierte Connection-Generation. Das Ticket wird nur für `AUTH_RECONNECT` am Signaling-WebSocket akzeptiert. Ein bereits aktiver Slot wird nicht übernommen; der Host bleibt die einzige Game-State-Autorität.

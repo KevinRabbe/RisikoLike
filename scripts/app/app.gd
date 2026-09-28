@@ -1,6 +1,6 @@
 extends Node
 
-const GAME_VERSION := "0.1.0-dev"
+const GAME_VERSION := "0.1.0"
 const PROTOCOL_VERSION := 1
 const APP_NAME := "RisikoLike"
 

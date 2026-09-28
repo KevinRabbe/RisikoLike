@@ -17,11 +17,11 @@ def setup() -> tuple[TestClient, dict, dict]:
     registry = LobbyRegistry(clock=Clock())
     client = TestClient(create_app(registry))
     created = client.post(
-        "/v1/lobbies", json={"game_version": "0.1.0-dev", "protocol_version": 1, "max_players": 2}
+        "/v1/lobbies", json={"game_version": "0.1.0", "protocol_version": 1, "max_players": 2}
     ).json()
     resolved = client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": created["invite_code"], "game_version": "0.1.0-dev", "protocol_version": 1},
+        json={"invite_code": created["invite_code"], "game_version": "0.1.0", "protocol_version": 1},
     ).json()
     return client, created, resolved
 
@@ -35,7 +35,7 @@ def test_host_join_auth_and_offer_answer_ice_relay() -> None:
                 "lobby_id": created["lobby_id"],
                 "host_session_token": created["host_session_token"],
                 "protocol_version": 1,
-                "game_version": "0.1.0-dev",
+                "game_version": "0.1.0",
             }
         )
         host_auth = host.receive_json()
@@ -48,7 +48,7 @@ def test_host_join_auth_and_offer_answer_ice_relay() -> None:
                     "lobby_id": resolved["lobby_id"],
                     "join_token": resolved["join_token"],
                     "protocol_version": 1,
-                    "game_version": "0.1.0-dev",
+                    "game_version": "0.1.0",
                 }
             )
             guest_auth = guest.receive_json()
@@ -93,7 +93,7 @@ def test_signaling_rejects_bad_host_token_and_protocol() -> None:
                 "lobby_id": created["lobby_id"],
                 "host_session_token": created["host_session_token"],
                 "protocol_version": 999,
-                "game_version": "0.1.0-dev",
+                "game_version": "0.1.0",
             }
         )
         assert socket.receive_json()["error"]["code"] == "PROTOCOL_MISMATCH"

@@ -29,7 +29,7 @@ def fixture() -> tuple[FakeClock, LobbyRegistry, TestClient]:
 def create(client: TestClient, max_players: int = 2) -> dict[str, Any]:
     response = client.post(
         "/v1/lobbies",
-        json={"game_version": "0.1.0-dev", "protocol_version": 1, "max_players": max_players},
+        json={"game_version": "0.1.0", "protocol_version": 1, "max_players": max_players},
     )
     assert response.status_code == 200, response.text
     return response.json()
@@ -49,7 +49,7 @@ def test_create_resolve_and_versions(fixture: tuple[FakeClock, LobbyRegistry, Te
     assert len(created["invite_code"]) == 7
     resolved = client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": created["invite_code"].lower(), "game_version": "0.1.0-dev", "protocol_version": 1},
+        json={"invite_code": created["invite_code"].lower(), "game_version": "0.1.0", "protocol_version": 1},
     )
     assert resolved.status_code == 200
     assert resolved.json()["lobby_id"] == created["lobby_id"]
@@ -60,7 +60,7 @@ def test_create_resolve_and_versions(fixture: tuple[FakeClock, LobbyRegistry, Te
     ).json()["error"]["code"] == "VERSION_MISMATCH"
     assert client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": created["invite_code"], "game_version": "0.1.0-dev", "protocol_version": 9},
+        json={"invite_code": created["invite_code"], "game_version": "0.1.0", "protocol_version": 9},
     ).json()["error"]["code"] == "PROTOCOL_MISMATCH"
 
 
@@ -77,7 +77,7 @@ def test_lobby_lifecycle_heartbeat_close_and_wrong_token(fixture: tuple[FakeCloc
     clock.advance(44)
     assert client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": created["invite_code"], "game_version": "0.1.0-dev", "protocol_version": 1},
+        json={"invite_code": created["invite_code"], "game_version": "0.1.0", "protocol_version": 1},
     ).status_code == 200
     close = client.post(
         f"/v1/lobbies/{created['lobby_id']}/close",
@@ -86,7 +86,7 @@ def test_lobby_lifecycle_heartbeat_close_and_wrong_token(fixture: tuple[FakeCloc
     assert close.status_code == 200
     resolved = client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": created["invite_code"], "game_version": "0.1.0-dev", "protocol_version": 1},
+        json={"invite_code": created["invite_code"], "game_version": "0.1.0", "protocol_version": 1},
     )
     assert resolved.json()["error"]["code"] == "LOBBY_CLOSED"
 
@@ -97,7 +97,7 @@ def test_ttl_and_valid_heartbeat(fixture: tuple[FakeClock, LobbyRegistry, TestCl
     clock.advance(46)
     expired = client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": created["invite_code"], "game_version": "0.1.0-dev", "protocol_version": 1},
+        json={"invite_code": created["invite_code"], "game_version": "0.1.0", "protocol_version": 1},
     )
     assert expired.json()["error"]["code"] == "LOBBY_EXPIRED"
     created = create(client)
@@ -109,7 +109,7 @@ def test_ttl_and_valid_heartbeat(fixture: tuple[FakeClock, LobbyRegistry, TestCl
     clock.advance(40)
     assert client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": created["invite_code"], "game_version": "0.1.0-dev", "protocol_version": 1},
+        json={"invite_code": created["invite_code"], "game_version": "0.1.0", "protocol_version": 1},
     ).status_code == 200
 
 
@@ -118,7 +118,7 @@ def test_join_token_is_lobby_bound_expiring_and_single_use(fixture: tuple[FakeCl
     created = create(client)
     resolved = client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": created["invite_code"], "game_version": "0.1.0-dev", "protocol_version": 1},
+        json={"invite_code": created["invite_code"], "game_version": "0.1.0", "protocol_version": 1},
     ).json()
     registry.consume_join_token(created["lobby_id"], resolved["join_token"])
     with pytest.raises(Exception) as replay:
@@ -130,7 +130,7 @@ def test_join_token_is_lobby_bound_expiring_and_single_use(fixture: tuple[FakeCl
     assert wrong_lobby.value.code == "INVALID_TOKEN"
     expiring = client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": other["invite_code"], "game_version": "0.1.0-dev", "protocol_version": 1},
+        json={"invite_code": other["invite_code"], "game_version": "0.1.0", "protocol_version": 1},
     ).json()
     clock.advance(40)
     assert client.post(
@@ -145,7 +145,7 @@ def test_join_token_is_lobby_bound_expiring_and_single_use(fixture: tuple[FakeCl
 
 def test_max_players_and_started_lobby(fixture: tuple[FakeClock, LobbyRegistry, TestClient]) -> None:
     _clock, _registry, client = fixture
-    invalid = client.post("/v1/lobbies", json={"game_version": "0.1.0-dev", "protocol_version": 1, "max_players": 1})
+    invalid = client.post("/v1/lobbies", json={"game_version": "0.1.0", "protocol_version": 1, "max_players": 1})
     assert invalid.json()["error"]["code"] == "INVALID_REQUEST"
     created = create(client)
     assert client.post(
@@ -154,7 +154,7 @@ def test_max_players_and_started_lobby(fixture: tuple[FakeClock, LobbyRegistry, 
     ).status_code == 200
     response = client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": created["invite_code"], "game_version": "0.1.0-dev", "protocol_version": 1},
+        json={"invite_code": created["invite_code"], "game_version": "0.1.0", "protocol_version": 1},
     )
     assert response.json()["error"]["code"] == "MATCH_ALREADY_STARTED"
 
@@ -171,14 +171,14 @@ def test_invalid_invite_and_rate_limit(fixture: tuple[FakeClock, LobbyRegistry, 
     _clock, registry, client = fixture
     malformed = client.post(
         "/v1/lobbies/resolve",
-        json={"invite_code": "0O1-111", "game_version": "0.1.0-dev", "protocol_version": 1},
+        json={"invite_code": "0O1-111", "game_version": "0.1.0", "protocol_version": 1},
     )
     assert malformed.json()["error"]["code"] == "INVALID_INVITE_CODE"
     create(client)
     registry.endpoint_limiters["create"].limit = 1
     limited = client.post(
         "/v1/lobbies",
-        json={"game_version": "0.1.0-dev", "protocol_version": 1, "max_players": 2},
+        json={"game_version": "0.1.0", "protocol_version": 1, "max_players": 2},
     )
     assert limited.status_code == 429
 
