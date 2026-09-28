@@ -1,7 +1,10 @@
 extends Control
 
+const DirectInviteCodec = preload("res://scripts/network/direct_invite.gd")
+
 var player_name_input: LineEdit
 var max_players_spin: SpinBox
+var host_address_input: LineEdit
 var port_spin: SpinBox
 var debug_check: CheckButton
 var cards_check: CheckButton
@@ -54,18 +57,23 @@ func _build_ui() -> void:
 	max_players_spin.max_value = 5
 	max_players_spin.value = 2
 	content.add_child(max_players_spin)
+	content.add_child(_label("Host-Adresse für den Invite (LAN/IP oder Hostname)"))
+	host_address_input = LineEdit.new()
+	host_address_input.text = DirectInviteCodec.local_host_address()
+	host_address_input.placeholder_text = "z. B. 192.168.1.20"
+	content.add_child(host_address_input)
 	debug_check = CheckButton.new()
-	debug_check.text = "Lokalen TCP-Debugmodus verwenden"
+	debug_check.text = "Loopback-TCP-Testmodus verwenden"
 	debug_check.toggled.connect(_on_debug_toggled)
 	content.add_child(debug_check)
-	port_label = _label("Development-Port")
-	port_label.visible = false
+	port_label = _label("Direct-Port")
+	port_label.visible = true
 	content.add_child(port_label)
 	port_spin = SpinBox.new()
 	port_spin.min_value = 1024
 	port_spin.max_value = 65535
-	port_spin.value = NetworkManager.DEFAULT_LOCAL_PORT
-	port_spin.visible = false
+	port_spin.value = NetworkManager.DEFAULT_DIRECT_PORT
+	port_spin.visible = true
 	content.add_child(port_spin)
 	cards_check = CheckButton.new()
 	cards_check.text = "Gebietskarten aktiv"
@@ -107,18 +115,20 @@ func _on_create_pressed() -> void:
 		result = NetworkManager.host_local_lobby(cleaned_name, int(max_players_spin.value), ruleset, int(port_spin.value))
 	else:
 		waiting_for_backend = true
-		status_label.text = "Backend: Lobby wird erstellt …"
-		result = NetworkManager.host_online_lobby(cleaned_name, int(max_players_spin.value), ruleset)
+		status_label.text = "Lobby wird gestartet …"
+		result = NetworkManager.host_direct_lobby(cleaned_name, int(max_players_spin.value), ruleset, int(port_spin.value), host_address_input.text)
 	if not bool(result.get("ok", false)):
 		waiting_for_backend = false
 		status_label.text = "Erstellen fehlgeschlagen: %s" % result.get("code", "NETWORK_ERROR")
 		return
 	if debug_check.button_pressed:
 		SceneRouter.go_to_lobby()
+	else:
+		SceneRouter.go_to_lobby()
 
 func _on_debug_toggled(enabled: bool) -> void:
-	port_label.visible = enabled
-	port_spin.visible = enabled
+	port_label.text = "Loopback-Port" if enabled else "Direct-Port"
+	host_address_input.editable = not enabled
 
 func _on_lobby_changed(_snapshot: LobbySnapshot) -> void:
 	if waiting_for_backend and NetworkManager.lobby_state != null:

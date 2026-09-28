@@ -15,7 +15,9 @@ signal signaling_disconnected
 signal signaling_message_received(message: Dictionary)
 
 const API_VERSION := "v1"
-const DEFAULT_BASE_URL := "http://127.0.0.1:8000"
+## Central rendezvous is an optional future/development mode. The normal V1
+## private-lobby flow is direct host-to-client and must not contact localhost.
+const DEFAULT_BASE_URL := ""
 var base_url := DEFAULT_BASE_URL
 var host_session_token := ""
 var join_token := ""

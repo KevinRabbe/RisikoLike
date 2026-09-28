@@ -1,5 +1,8 @@
 extends Node
 
+const DirectInviteCodec = preload("res://scripts/network/direct_invite.gd")
+const DirectTransport = preload("res://scripts/network/direct_network_transport.gd")
+
 signal connection_changed(state: String)
 signal network_error(code: String)
 signal lobby_changed(snapshot: LobbySnapshot)
@@ -7,10 +10,13 @@ signal command_result_received(result: CommandResult)
 signal state_snapshot_changed(snapshot: GameStateSnapshot)
 signal match_started(game_state: GameState)
 signal peer_changed(player_id: String, connected: bool)
+signal direct_connectivity_changed(state: String, address: String, port: int)
 
 enum Role { NONE, HOST, CLIENT }
 
 const DEFAULT_LOCAL_PORT := 43100
+const DEFAULT_DIRECT_PORT := 43100
+const DIRECT_RECONNECT_GRACE_SECONDS := 180
 
 var role: Role = Role.NONE
 var connection_state := "offline"
@@ -23,6 +29,17 @@ var lobby_state: LobbyState
 var command_processor: CommandProcessor
 var transport: NetworkTransport
 var backend_mode := false
+var direct_mode := false
+var direct_host_address := ""
+var direct_host_port := 0
+var direct_session_id := ""
+var direct_join_secret := ""
+var direct_connectivity_state := "LOCAL_READY"
+var _upnp_gateway: Variant
+var _upnp_mapped := false
+var _direct_reconnect_tokens: Dictionary = {}
+var _direct_reconnect_generation := 0
+var _direct_pending_reconnect := false
 var _backend_pending_role := ""
 var _backend_pending_name := ""
 var _backend_pending_max_players := 2
@@ -110,6 +127,7 @@ func set_connection_state(next_state: String) -> void:
 
 func host_local_lobby(player_name: String, max_players: int, p_ruleset: Ruleset = null, port: int = DEFAULT_LOCAL_PORT) -> Dictionary:
 	backend_mode = false
+	direct_mode = false
 	return _host_lobby(player_name, max_players, p_ruleset, port, LocalNetworkTransport.new())
 
 func host_lobby_on_transport(player_name: String, max_players: int, p_ruleset: Ruleset, p_transport: NetworkTransport, port: int = DEFAULT_LOCAL_PORT) -> Dictionary:
@@ -146,12 +164,63 @@ func _host_lobby(player_name: String, max_players: int, p_ruleset: Ruleset, port
 	set_connection_state("hosting")
 	_sync_session()
 	_emit_lobby_changed()
-	print("[LOBBY] host lobby=%s code=%s player=%s port=%d" % [lobby_id, lobby_state.invite_code, local_player_id, port])
+	print("[LOBBY] host lobby=%s player=%s port=%d" % [lobby_id, local_player_id, port])
 	return {"ok": true, "code": "OK", "lobby_id": lobby_id, "invite_code": lobby_state.invite_code, "player_id": local_player_id}
 
 func join_local_lobby(player_name: String, address: String = "127.0.0.1", port: int = DEFAULT_LOCAL_PORT) -> Dictionary:
 	backend_mode = false
+	direct_mode = false
 	return _join_lobby(player_name, address, port, LocalNetworkTransport.new())
+
+func host_direct_lobby(player_name: String, max_players: int, p_ruleset: Ruleset = null, port: int = DEFAULT_DIRECT_PORT, advertised_address: String = "") -> Dictionary:
+	if player_name.strip_edges().length() < 2 or player_name.strip_edges().length() > 20:
+		return {"ok": false, "code": "NAME_INVALID"}
+	if port < 1 or port > 65535:
+		return {"ok": false, "code": "INVALID_PORT"}
+	backend_mode = false
+	direct_mode = true
+	direct_host_address = advertised_address.strip_edges() if not advertised_address.strip_edges().is_empty() else DirectInviteCodec.local_host_address()
+	direct_host_port = port
+	direct_session_id = _new_id("session")
+	direct_join_secret = _random_secret()
+	var result := _host_lobby(player_name, max_players, p_ruleset, port, DirectTransport.new())
+	if not bool(result.get("ok", false)):
+		direct_mode = false
+		return result
+	lobby_state.invite_code = DirectInviteCodec.encode(direct_host_address, port, direct_session_id, direct_join_secret)
+	_emit_lobby_changed()
+	direct_connectivity_state = "LOCAL_READY"
+	direct_connectivity_changed.emit(direct_connectivity_state, direct_host_address, direct_host_port)
+	call_deferred("_attempt_upnp_mapping", port)
+	print("[LOBBY] direct host session=%s player=%s port=%d" % [_short_id(direct_session_id), local_player_id, port])
+	return {"ok": true, "code": "OK", "lobby_id": lobby_id, "invite_code": lobby_state.invite_code, "player_id": local_player_id, "host_address": direct_host_address, "port": port}
+
+func join_direct_lobby(player_name: String, invite_code: String) -> Dictionary:
+	var decoded := DirectInviteCodec.decode(DirectInviteCodec.normalize(invite_code))
+	if not bool(decoded.get("ok", false)):
+		return decoded
+	var invite: Dictionary = decoded.get("invite", {})
+	direct_mode = true
+	backend_mode = false
+	direct_host_address = str(invite.get("host_address", ""))
+	direct_host_port = int(invite.get("port", 0))
+	direct_session_id = str(invite.get("session_id", ""))
+	direct_join_secret = str(invite.get("join_secret", ""))
+	var result := _join_lobby(player_name, direct_host_address, direct_host_port, DirectTransport.new())
+	if not bool(result.get("ok", false)):
+		direct_mode = false
+	return result
+
+func join_direct_address(player_name: String, address: String, port: int, session_id: String, join_secret: String) -> Dictionary:
+	if address.strip_edges().is_empty() or session_id.strip_edges().is_empty() or join_secret.strip_edges().length() < 32:
+		return {"ok": false, "code": "INVALID_REQUEST"}
+	direct_mode = true
+	backend_mode = false
+	direct_host_address = address.strip_edges()
+	direct_host_port = port
+	direct_session_id = session_id.strip_edges()
+	direct_join_secret = join_secret.strip_edges()
+	return _join_lobby(player_name, direct_host_address, direct_host_port, DirectTransport.new())
 
 func host_online_lobby(player_name: String, max_players: int, p_ruleset: Ruleset = null) -> Dictionary:
 	if player_name.strip_edges().length() < 2 or player_name.strip_edges().length() > 20:
@@ -432,6 +501,11 @@ func start_match(seed_value: int = 424242) -> Dictionary:
 	_sync_session()
 	_broadcast_lobby()
 	_broadcast_game_state(NetworkMessage.MATCH_STARTED)
+	if direct_mode:
+		for peer_id in transport.peer_ids() if transport != null else []:
+			var player_id := str(_peer_to_player.get(peer_id, ""))
+			if not player_id.is_empty():
+				_issue_direct_reconnect_credential(player_id, int(peer_id), match_id)
 	match_started.emit(game_state)
 	print("[GAME] match started lobby=%s revision=%d" % [lobby_id, game_state.state_revision])
 	return {"ok": true, "code": "OK", "match_id": match_id}
@@ -471,6 +545,40 @@ func close_lobby() -> void:
 		_broadcast(NetworkMessage.new(NetworkMessage.ERROR, {"code": "LOBBY_CLOSED"}, lobby_id))
 	shutdown()
 
+func _attempt_upnp_mapping(port: int) -> void:
+	if not direct_mode or transport == null or role != Role.HOST:
+		return
+	if not ClassDB.class_exists("UPNP"):
+		direct_connectivity_state = "PORT_MAPPING_UNAVAILABLE"
+		direct_connectivity_changed.emit(direct_connectivity_state, direct_host_address, port)
+		return
+	var upnp := UPNP.new()
+	var discover_result: int = upnp.discover(1500, 1, "InternetGatewayDevice")
+	if discover_result != OK:
+		direct_connectivity_state = "PORT_MAPPING_FAILED"
+		direct_connectivity_changed.emit(direct_connectivity_state, direct_host_address, port)
+		return
+	var gateway: Variant = upnp.get_gateway()
+	if gateway == null or not gateway.is_valid_gateway():
+		direct_connectivity_state = "PORT_MAPPING_FAILED"
+		direct_connectivity_changed.emit(direct_connectivity_state, direct_host_address, port)
+		return
+	var map_result: int = gateway.add_port_mapping(port, port, "ATLAS FRONT", "TCP", 3600)
+	if map_result != 0:
+		direct_connectivity_state = "PORT_MAPPING_FAILED"
+		direct_connectivity_changed.emit(direct_connectivity_state, direct_host_address, port)
+		return
+	_upnp_gateway = gateway
+	_upnp_mapped = true
+	var external_address := str(gateway.query_external_address())
+	if not external_address.is_empty() and direct_host_address == DirectInviteCodec.local_host_address():
+		direct_host_address = external_address
+		if lobby_state != null:
+			lobby_state.invite_code = DirectInviteCodec.encode(direct_host_address, port, direct_session_id, direct_join_secret)
+			_emit_lobby_changed()
+	direct_connectivity_state = "INTERNET_READY"
+	direct_connectivity_changed.emit(direct_connectivity_state, direct_host_address, port)
+
 func get_local_player() -> PlayerState:
 	return game_state.get_player(local_player_id) if game_state != null else null
 
@@ -503,6 +611,10 @@ func find_valid_card_set(card_ids: Array[String]) -> Array[String]:
 	return []
 
 func shutdown() -> void:
+	if _upnp_mapped and _upnp_gateway != null and direct_host_port > 0:
+		_upnp_gateway.delete_port_mapping(direct_host_port, "TCP")
+	_upnp_gateway = null
+	_upnp_mapped = false
 	if transport != null:
 		transport.close()
 	transport = null
@@ -530,6 +642,13 @@ func shutdown() -> void:
 	_reconnect_transport_pending = false
 	_pending_peer_identities.clear()
 	_issued_reconnect_generations.clear()
+	_direct_reconnect_tokens.clear()
+	_direct_pending_reconnect = false
+	direct_mode = false
+	direct_host_address = ""
+	direct_host_port = 0
+	direct_session_id = ""
+	direct_join_secret = ""
 	backend_mode = false
 	_sync_session()
 	connection_changed.emit(connection_state)
@@ -588,18 +707,34 @@ func _on_peer_connected(peer_id: int) -> void:
 		_send_snapshot_to_peer(peer_id, player_id, NetworkMessage.STATE_SNAPSHOT)
 		peer_changed.emit(player_id, true)
 		return
-	if role == Role.CLIENT and peer_id == 1 and not _reconnect_transport_pending:
-		_send_message(1, NetworkMessage.new(NetworkMessage.JOIN_REQUEST, {
+	if role == Role.CLIENT and peer_id == 1 and (not _reconnect_transport_pending or direct_mode):
+		var join_payload := {
 			"player_name": _pending_join_name,
 			"protocol_version": App.PROTOCOL_VERSION,
 			"game_version": App.GAME_VERSION,
-		}, lobby_id))
+		}
+		if direct_mode:
+			join_payload["session_id"] = direct_session_id
+			join_payload["join_secret"] = direct_join_secret
+			if _direct_pending_reconnect:
+				var session := get_node_or_null("/root/SessionManager")
+				join_payload["reconnect_player_id"] = local_player_id
+				join_payload["reconnect_token"] = str(session.reconnect_token) if session != null else ""
+				join_payload["connection_generation"] = int(session.connection_generation) + 1 if session != null else 1
+			print("[DIRECT] send join peer=%d reconnect=%s" % [peer_id, _direct_pending_reconnect])
+		_send_message(1, NetworkMessage.new(NetworkMessage.JOIN_REQUEST, join_payload, lobby_id))
 
 func _on_peer_disconnected(peer_id: int) -> void:
 	var player_id := str(_peer_to_player.get(peer_id, ""))
 	if not player_id.is_empty() and lobby_state != null and role == Role.HOST:
+		var mapped_player := lobby_state.get_player(player_id)
+		if mapped_player != null and mapped_player.network_peer_id != peer_id:
+			# A replacement reconnect can be accepted before the old TCP socket
+			# reports its close. The stale socket must not disconnect the new one.
+			_peer_to_player.erase(peer_id)
+			return
 		if game_state != null and not match_id.is_empty() and game_state.status == GameState.MatchStatus.PLAYING:
-			var lobby_player := lobby_state.get_player(player_id)
+			var lobby_player := mapped_player
 			if lobby_player != null:
 				lobby_player.network_peer_id = 0
 				lobby_player.connection_state = "DISCONNECTED"
@@ -723,6 +858,19 @@ func _handle_client_message(message: NetworkMessage) -> void:
 			network_error.emit("UNKNOWN_MESSAGE_TYPE")
 
 func _handle_join_request(peer_id: int, message: NetworkMessage) -> void:
+	if direct_mode:
+		print("[DIRECT] join request peer=%d reconnect=%s" % [peer_id, not str(message.payload.get("reconnect_player_id", "")).is_empty()])
+	if direct_mode:
+		if str(message.payload.get("session_id", "")) != direct_session_id:
+			_send_message(peer_id, NetworkMessage.new(NetworkMessage.JOIN_REJECTED, {"code": "SESSION_INVALID"}, lobby_id))
+			return
+		if _hash_secret(str(message.payload.get("join_secret", ""))) != _hash_secret(direct_join_secret):
+			_send_message(peer_id, NetworkMessage.new(NetworkMessage.JOIN_REJECTED, {"code": "JOIN_SECRET_INVALID"}, lobby_id))
+			return
+		var reconnect_player_id := str(message.payload.get("reconnect_player_id", ""))
+		if not reconnect_player_id.is_empty():
+			_handle_direct_reconnect_request(peer_id, message)
+			return
 	if lobby_state == null or lobby_state.status != LobbyState.Status.OPEN:
 		_send_message(peer_id, NetworkMessage.new(NetworkMessage.JOIN_REJECTED, {"code": "LOBBY_CLOSED"}, lobby_id))
 		return
@@ -746,6 +894,52 @@ func _handle_join_request(peer_id: int, message: NetworkMessage) -> void:
 	_broadcast_lobby()
 	peer_changed.emit(player_id, true)
 	print("[LOBBY] player joined player=%s peer=%d" % [player_id, peer_id])
+	if direct_mode and game_state == null:
+		_issue_direct_reconnect_credential(player_id, peer_id, "")
+
+func _handle_direct_reconnect_request(peer_id: int, message: NetworkMessage) -> void:
+	if lobby_state == null or game_state == null or lobby_state.status != LobbyState.Status.IN_GAME:
+		_send_message(peer_id, NetworkMessage.new(NetworkMessage.JOIN_REJECTED, {"code": "MATCH_NOT_AVAILABLE"}, lobby_id))
+		return
+	var player_id := str(message.payload.get("reconnect_player_id", ""))
+	var player := lobby_state.get_player(player_id)
+	var stored: Dictionary = _direct_reconnect_tokens.get(player_id, {})
+	var token := str(message.payload.get("reconnect_token", ""))
+	var requested_generation := int(message.payload.get("connection_generation", 0))
+	var expected_generation := int(stored.get("generation", 0))
+	var expired := int(stored.get("expires_unix", 0)) > 0 and int(Time.get_unix_time_from_system()) >= int(stored.get("expires_unix", 0))
+	if player == null or player.connection_state != "DISCONNECTED" or token.is_empty() or _hash_secret(token) != str(stored.get("token_hash", "")) or requested_generation != expected_generation + 1 or expired:
+		print("[DIRECT] reconnect rejected peer=%d player=%s generation=%d" % [peer_id, player_id, requested_generation])
+		_send_message(peer_id, NetworkMessage.new(NetworkMessage.JOIN_REJECTED, {"code": "RECONNECT_FAILED"}, match_id))
+		return
+	var reconnect_result := command_processor.mark_reconnected(player_id)
+	if not bool(reconnect_result.get("ok", false)):
+		_send_message(peer_id, NetworkMessage.new(NetworkMessage.JOIN_REJECTED, {"code": str(reconnect_result.get("code", "RECONNECT_FAILED"))}, match_id))
+		return
+	_peer_to_player[peer_id] = player_id
+	player.network_peer_id = peer_id
+	player.connection_state = "CONNECTED"
+	_send_message(peer_id, NetworkMessage.new(NetworkMessage.JOIN_ACCEPTED, {"player_id": player_id, "lobby_id": lobby_id}, match_id))
+	_issue_direct_reconnect_credential(player_id, peer_id, match_id, requested_generation)
+	_broadcast_lobby()
+	_send_snapshot_to_peer(peer_id, player_id, NetworkMessage.STATE_SNAPSHOT)
+	peer_changed.emit(player_id, true)
+	print("[DIRECT] reconnect accepted player=%s generation=%d" % [player_id, requested_generation])
+
+func _issue_direct_reconnect_credential(player_id: String, peer_id: int, credential_match_id: String, requested_generation: int = 0) -> void:
+	if not direct_mode or player_id.is_empty() or peer_id <= 0:
+		return
+	var generation := requested_generation if requested_generation > 0 else maxi(1, int(_direct_reconnect_tokens.get(player_id, {}).get("generation", 0)))
+	var token := _random_secret()
+	var expires_unix := int(Time.get_unix_time_from_system()) + DIRECT_RECONNECT_GRACE_SECONDS
+	_direct_reconnect_tokens[player_id] = {"token_hash": _hash_secret(token), "generation": generation, "expires_unix": expires_unix}
+	_send_message(peer_id, NetworkMessage.new(NetworkMessage.RECONNECT_CREDENTIAL, {
+		"match_id": credential_match_id,
+		"player_id": player_id,
+		"reconnect_token": token,
+		"expires_at": str(expires_unix),
+		"connection_generation": generation,
+	}, credential_match_id))
 
 func _handle_spectator_request(peer_id: int, message: NetworkMessage) -> void:
 	var player_id := str(_peer_to_player.get(peer_id, ""))
@@ -831,6 +1025,7 @@ func _apply_snapshot_message(message: NetworkMessage) -> void:
 	_reconnect_request_pending = false
 	_reconnect_elapsed = 0.0
 	_reconnect_attempts = 0
+	_direct_pending_reconnect = false
 	set_connection_state("in_game")
 	_sync_session()
 	state_snapshot_changed.emit(snapshot)
@@ -916,6 +1111,22 @@ func _attempt_reconnect() -> void:
 		return
 	_reconnect_request_pending = true
 	set_connection_state("reconnecting")
+	if direct_mode:
+		var next_direct_transport := DirectTransport.new()
+		if not _replace_transport(next_direct_transport):
+			_reconnect_request_pending = false
+			set_connection_state("disconnected")
+			return
+		_direct_pending_reconnect = true
+		_reconnect_request_pending = false
+		_reconnect_transport_pending = true
+		if not next_direct_transport.connect_to_host(direct_host_address, direct_host_port):
+			_direct_pending_reconnect = false
+			_reconnect_transport_pending = false
+			_reconnect_attempts += 1
+			set_connection_state("disconnected")
+			network_error.emit("RECONNECT_FAILED")
+		return
 	var backend := get_node_or_null("/root/BackendClient")
 	if backend == null:
 		_reconnect_request_pending = false
@@ -927,6 +1138,16 @@ func _attempt_reconnect() -> void:
 		_reconnect_attempts += 1
 		set_connection_state("disconnected")
 		network_error.emit(str(result.get("code", "RECONNECT_FAILED")))
+
+func _random_secret() -> String:
+	var crypto := Crypto.new()
+	return Marshalls.raw_to_base64(crypto.generate_random_bytes(32)).replace("+", "-").replace("/", "_").replace("=", "")
+
+func _hash_secret(value: String) -> String:
+	return value.sha256_text()
+
+func _short_id(value: String) -> String:
+	return value.substr(0, mini(12, value.length()))
 
 func _new_id(prefix: String) -> String:
 	return "%s-%d" % [prefix, Time.get_ticks_usec()]

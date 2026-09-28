@@ -20,6 +20,7 @@ func _ready() -> void:
 	NetworkManager.lobby_changed.connect(_on_lobby_changed)
 	NetworkManager.network_error.connect(_on_network_error)
 	NetworkManager.match_started.connect(_on_match_started)
+	NetworkManager.direct_connectivity_changed.connect(_on_direct_connectivity_changed)
 	_refresh(NetworkManager.lobby_state)
 
 func _build_ui() -> void:
@@ -108,11 +109,15 @@ func _refresh(lobby: LobbyState) -> void:
 		status_label.text = "Keine Lobby aktiv."
 		return
 	title_label.text = "Lobby %s" % lobby.lobby_id
-	if NetworkManager.backend_mode:
-		invite_label.text = "Invite-Code: %s | Online-Signaling | Status: %s" % [lobby.invite_code, lobby.status_name()]
+	if NetworkManager.direct_mode:
+		invite_label.text = "Direct-Invite: %s | %s:%d | Status: %s" % [lobby.invite_code, NetworkManager.direct_host_address, NetworkManager.direct_host_port, lobby.status_name()]
+		copy_button.visible = not lobby.invite_code.is_empty()
+	elif NetworkManager.backend_mode:
+		invite_label.text = "Invite-Code: %s | Optionales Signaling | Status: %s" % [lobby.invite_code, lobby.status_name()]
+		copy_button.visible = NetworkManager.backend_mode and not lobby.invite_code.is_empty()
 	else:
 		invite_label.text = "Development-Code: %s | localhost:%d | Status: %s" % [lobby.invite_code, NetworkManager.local_port, lobby.status_name()]
-	copy_button.visible = NetworkManager.backend_mode and not lobby.invite_code.is_empty()
+		copy_button.visible = false
 	for child in players_list.get_children():
 		child.queue_free()
 	for player_id: String in _sorted_player_ids(lobby.players):
@@ -132,6 +137,8 @@ func _refresh(lobby: LobbyState) -> void:
 	if NetworkManager.role == NetworkManager.Role.CLIENT:
 		var local := lobby.get_player(NetworkManager.local_player_id)
 		ready_button.text = "Nicht bereit" if local != null and local.is_ready else "Bereit"
+	if NetworkManager.direct_mode:
+		status_label.text = "Direct Host: %s" % NetworkManager.direct_connectivity_state
 
 func _on_ready_pressed() -> void:
 	var lobby := NetworkManager.lobby_state
@@ -171,6 +178,10 @@ func _on_network_error(code: String) -> void:
 	if code == "LOBBY_CLOSED":
 		NetworkManager.shutdown()
 		SceneRouter.go_to_main_menu()
+
+func _on_direct_connectivity_changed(state: String, address: String, port: int) -> void:
+	if NetworkManager.direct_mode:
+		status_label.text = "%s // %s:%d" % [state, address, port]
 
 func _on_match_started(_state: GameState) -> void:
 	SceneRouter.go_to_game()

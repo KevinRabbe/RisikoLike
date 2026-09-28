@@ -1,8 +1,12 @@
 extends Control
 
+const DirectInviteCodec = preload("res://scripts/network/direct_invite.gd")
+
 var player_name_input: LineEdit
 var invite_code_input: LineEdit
 var address_input: LineEdit
+var session_input: LineEdit
+var secret_input: LineEdit
 var port_spin: SpinBox
 var debug_check: CheckButton
 var status_label: Label
@@ -46,13 +50,13 @@ func _build_ui() -> void:
 	player_name_input.text = SettingsManager.player_name
 	player_name_input.max_length = 20
 	content.add_child(player_name_input)
-	content.add_child(_label("Invite-Code (ABC-123)"))
+	content.add_child(_label("Self-contained Invite (AF1.… )"))
 	invite_code_input = LineEdit.new()
-	invite_code_input.placeholder_text = "ABC-123"
-	invite_code_input.max_length = 7
+	invite_code_input.placeholder_text = "AF1.…"
+	invite_code_input.max_length = DirectInviteCodec.MAX_LENGTH
 	content.add_child(invite_code_input)
 	debug_check = CheckButton.new()
-	debug_check.text = "Lokalen TCP-Debugmodus verwenden"
+	debug_check.text = "Direktadresse manuell verwenden"
 	debug_check.toggled.connect(_on_debug_toggled)
 	content.add_child(debug_check)
 	content.add_child(_label("Host-Adresse"))
@@ -60,6 +64,14 @@ func _build_ui() -> void:
 	address_input.text = "127.0.0.1"
 	address_input.visible = false
 	content.add_child(address_input)
+	content.add_child(_label("Session-ID"))
+	session_input = LineEdit.new()
+	session_input.visible = false
+	content.add_child(session_input)
+	content.add_child(_label("Join-Secret"))
+	secret_input = LineEdit.new()
+	secret_input.visible = false
+	content.add_child(secret_input)
 	var port_label := _label("Development-Port")
 	port_label.visible = false
 	content.add_child(port_label)
@@ -95,15 +107,15 @@ func _on_join_pressed() -> void:
 	SettingsManager.save_settings()
 	var result: Dictionary
 	if debug_check.button_pressed:
-		result = NetworkManager.join_local_lobby(cleaned_name, address_input.text.strip_edges(), int(port_spin.value))
+		result = NetworkManager.join_direct_address(cleaned_name, address_input.text.strip_edges(), int(port_spin.value), session_input.text.strip_edges(), secret_input.text.strip_edges())
 	else:
-		var code := _normalize_invite_code(invite_code_input.text)
+		var code := DirectInviteCodec.normalize(invite_code_input.text)
 		if code.is_empty():
-			status_label.text = "Invite-Code muss das Format ABC-123 haben."
+			status_label.text = "Invite muss das Format AF1.… haben."
 			return
 		waiting_for_backend = true
-		status_label.text = "Backend: Invite-Code wird aufgelöst …"
-		result = NetworkManager.join_online_lobby(cleaned_name, code)
+		status_label.text = "Direktverbindung wird aufgebaut …"
+		result = NetworkManager.join_direct_lobby(cleaned_name, code)
 	if not bool(result.get("ok", false)):
 		waiting_for_backend = false
 		status_label.text = "Beitreten fehlgeschlagen: %s" % result.get("code", "NETWORK_ERROR")
@@ -122,6 +134,8 @@ func _label(value: String) -> Label:
 
 func _on_debug_toggled(enabled: bool) -> void:
 	address_input.visible = enabled
+	session_input.visible = enabled
+	secret_input.visible = enabled
 	port_spin.visible = enabled
 	invite_code_input.visible = not enabled
 	for child in address_input.get_parent().get_children():
@@ -136,13 +150,4 @@ func _on_lobby_changed(_snapshot: LobbySnapshot) -> void:
 func _on_network_error(code: String) -> void:
 	if waiting_for_backend:
 		waiting_for_backend = false
-		status_label.text = "Backend/Netzwerk: %s" % code
-
-func _normalize_invite_code(value: String) -> String:
-	var compact := value.strip_edges().replace("-", "").replace(" ", "").to_upper()
-	if compact.length() != 6:
-		return ""
-	for character in compact:
-		if not "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".contains(character):
-			return ""
-	return "%s-%s" % [compact.substr(0, 3), compact.substr(3, 3)]
+		status_label.text = "Netzwerk: %s" % code
