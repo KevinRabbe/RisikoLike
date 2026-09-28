@@ -59,6 +59,8 @@ func _test_interaction_states(map_controller: MapController, game_state: GameSta
 	_expect_equal(map_controller.map_surface._interaction_for("NA_06"), "invalid", "own neighbor is an invalid attack target")
 	map_controller.set_interaction_context("NA_01", "NA_02", TurnState.Phase.ATTACK, "P1")
 	_expect_equal(map_controller.map_surface._interaction_for("NA_02"), "target", "selected attack target is distinct")
+	map_controller.set_interaction_context("NA_01", "NA_06", TurnState.Phase.FORTIFICATION, "P1")
+	_expect_equal(map_controller.map_surface._interaction_for("NA_06"), "target", "own neighbor is a valid fortification target")
 
 func _expect(condition: bool, label: String) -> void:
 	if condition:
