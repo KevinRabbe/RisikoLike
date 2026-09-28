@@ -326,6 +326,7 @@ func _refresh_ui() -> void:
 			map_controller.configure(game_state.map_data, game_state)
 		else:
 			map_controller.refresh()
+		map_controller.set_interaction_context(source_id, target_id, game_state.turn_state.phase, _command_player_id())
 	var active_player := game_state.get_player(game_state.turn_state.active_player_id)
 	var visible_player := game_state.get_player(_command_player_id()) if not _command_player_id().is_empty() else active_player
 	phase_label.text = "Phase: %s | Runde %d | Revision %d" % [game_state.turn_state.phase_name(), game_state.turn_state.round_number, game_state.state_revision]
