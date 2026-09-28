@@ -161,6 +161,10 @@ func apply_to_game_state(target: GameState) -> bool:
 	if target == null or match_id.is_empty() or state_revision < 0:
 		return false
 	target.match_id = match_id
+	# Static map data is local configuration, not part of the wire snapshot.
+	# Recreate it when a client installs its first authoritative snapshot so
+	# the normal Game/Map UI can render the replicated state.
+	target.map_data = MapDataFactory.create_default()
 	target.state_revision = state_revision
 	target.status = status as GameState.MatchStatus
 	target.winner_player_id = winner_player_id

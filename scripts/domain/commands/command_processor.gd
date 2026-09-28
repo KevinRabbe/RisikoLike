@@ -64,6 +64,8 @@ func _validate_envelope(command: CommandEnvelope) -> String:
 		return "DUPLICATE_ACTION"
 	if command.expected_state_revision != game_state.state_revision:
 		return "STALE_STATE"
+	if game_state.status == GameState.MatchStatus.FINISHED:
+		return "MATCH_FINISHED"
 	if game_state.status != GameState.MatchStatus.PLAYING:
 		return "MATCH_NOT_PLAYING"
 	if game_state.get_player(command.player_id) == null:

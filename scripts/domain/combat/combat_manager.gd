@@ -75,7 +75,11 @@ func attack(player_id: String, source_id: String, target_id: String, attacker_di
 			card_manager.transfer_cards(old_owner, player_id)
 			if game_state.get_player(player_id).territory_card_ids.size() >= game_state.ruleset.forced_trade_threshold:
 				game_state.forced_trade_player_id = player_id
-	var victory := game_state.check_victory()
+	# Ownership changes immediately, but a conquest move is still required
+	# before the match may finish.
+	var victory := MatchResult.new("IN_PROGRESS")
+	if not conquered:
+		victory = game_state.check_victory()
 	return {
 		"accepted": true,
 		"code": "OK",
@@ -103,4 +107,11 @@ func conquest_move(player_id: String, amount: int) -> Dictionary:
 	target.army_count += amount
 	game_state.pending_conquest.clear()
 	game_state.combat_state.clear()
-	return {"accepted": true, "code": "OK", "amount": amount}
+	var victory := game_state.check_victory()
+	return {
+		"accepted": true,
+		"code": "OK",
+		"amount": amount,
+		"victory": victory.status == "VICTORY",
+		"winner_player_id": victory.winner_player_id,
+	}

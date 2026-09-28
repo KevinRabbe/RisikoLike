@@ -372,6 +372,8 @@ Zwei PCs in unterschiedlichen normalen Heimnetzwerken können per Invite-Code ei
 
 # M9 — Full Multiplayer Game Loop
 
+> **Status:** Abgeschlossen — vollständiger host-autoritärer 2-Spieler-WebRTC-Full-Match inklusive Kartenhandel, Würfeln, Eroberung, Fortifikation, Kartenziehen, Eliminierung, Aufgabe und Sieg über zwei getrennte Prozesse validiert. Die M8-Manual-Gates für getrennte Netzwerke und erzwungenes TURN bleiben offen; M10 wird bewusst nicht gestartet.
+
 ## Ziel
 
 Alle bereits lokal funktionierenden Spielregeln funktionieren host-authoritativ über Netzwerk.

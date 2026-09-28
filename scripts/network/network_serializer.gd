@@ -31,4 +31,21 @@ static func decode_result(raw: Variant) -> CommandResult:
 	return CommandResult.from_dict(raw)
 
 static func canonical_json(value: Variant) -> String:
-	return JSON.stringify(value)
+	return JSON.stringify(_canonicalize(value))
+
+static func _canonicalize(value: Variant) -> Variant:
+	if value is Dictionary:
+		var result: Dictionary = {}
+		for key in value:
+			result[key] = _canonicalize(value[key])
+		return result
+	if value is Array:
+		var result_array: Array = []
+		for item in value:
+			result_array.append(_canonicalize(item))
+		return result_array
+	if value is float:
+		var numeric := float(value)
+		if is_equal_approx(numeric, round(numeric)):
+			return int(round(numeric))
+	return value

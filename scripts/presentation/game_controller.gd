@@ -21,6 +21,7 @@ var source_id := ""
 var target_id := ""
 var network_mode := false
 var local_player_id := ""
+var pending_network_action := false
 
 func _ready() -> void:
 	if NetworkManager.has_active_match():
@@ -222,9 +223,14 @@ func _execute(command: CommandEnvelope) -> void:
 	if command == null or command.player_id.is_empty():
 		return
 	if network_mode:
+		if pending_network_action:
+			result_label.text = "Aktion wird noch verarbeitet."
+			return
 		var queued := NetworkManager.submit_command(command)
 		if not bool(queued.get("ok", false)):
 			result_label.text = "Abgelehnt: %s" % queued.get("code", "NETWORK_ERROR")
+		else:
+			pending_network_action = true
 		_refresh_ui()
 		return
 	var result := processor.execute(command)
@@ -237,8 +243,9 @@ func _execute(command: CommandEnvelope) -> void:
 	_refresh_ui()
 
 func _on_network_command_result(result: CommandResult) -> void:
+	pending_network_action = false
 	if result.accepted:
-		result_label.text = "Host bestätigt: %s" % result.code
+		result_label.text = "Host bestätigt: %s" % _format_command_result(result)
 		source_id = ""
 		target_id = ""
 	else:
@@ -270,9 +277,15 @@ func _refresh_ui() -> void:
 		player_panel.add_child(player_row)
 	selection_label.text = "Auswahl: %s -> %s" % [source_id if not source_id.is_empty() else "—", target_id if not target_id.is_empty() else "—"]
 	var reinforcement_phase := game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT
-	reset_button.visible = reinforcement_phase
-	trade_button.visible = game_state.turn_state.phase == TurnState.Phase.CARD_TRADE or game_state.forced_trade_player_id == game_state.turn_state.active_player_id
 	var can_act := not network_mode or game_state.turn_state.active_player_id == local_player_id
+	reset_button.visible = reinforcement_phase
+	trade_button.visible = can_act and (game_state.turn_state.phase == TurnState.Phase.CARD_TRADE or game_state.forced_trade_player_id == game_state.turn_state.active_player_id)
+	if network_mode:
+		primary_action.disabled = pending_network_action
+		trade_button.disabled = pending_network_action
+		reset_button.disabled = pending_network_action
+		end_phase_button.disabled = pending_network_action
+		end_turn_button.disabled = pending_network_action
 	primary_action.visible = can_act and (game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT or game_state.turn_state.phase == TurnState.Phase.ATTACK or game_state.turn_state.phase == TurnState.Phase.FORTIFICATION)
 	end_phase_button.visible = can_act and game_state.turn_state.phase != TurnState.Phase.TURN_END and game_state.status == GameState.MatchStatus.PLAYING
 	end_phase_button.text = "Verstärkungen bestätigen" if reinforcement_phase else "Phase beenden"
@@ -290,6 +303,19 @@ func _find_valid_card_set(card_ids: Array[String]) -> Array[String]:
 				if processor.card_manager.is_valid_set(candidate):
 					return candidate
 	return []
+
+func _format_command_result(result: CommandResult) -> String:
+	if result == null or not result.accepted:
+		return result.code if result != null else "NETWORK_ERROR"
+	var data := result.data
+	if data.has("attacker_dice"):
+		return "Kampf: Angriff %s / Verteidigung %s | Verluste A:%d V:%d%s" % [str(data.get("attacker_dice", [])), str(data.get("defender_dice", [])), int(data.get("attacker_losses", 0)), int(data.get("defender_losses", 0)), " | Eroberung" if bool(data.get("conquered", false)) else ""]
+	if data.has("trade"):
+		var trade: Dictionary = data.get("trade", {})
+		return "Kartentausch: +%d Verstärkungen" % int(trade.get("bonus", 0))
+	if bool(data.get("victory", false)):
+		return "Sieg: %s" % str(data.get("winner_player_id", game_state.winner_player_id))
+	return str(data.get("code", result.code))
 
 func _command_player_id() -> String:
 	if network_mode:
