@@ -4,16 +4,12 @@ var version_label: Label
 
 func _ready() -> void:
 	AtlasFrontTheme.install(self)
-	AtlasFrontTheme.add_backdrop(self)
+	AtlasFrontTheme.add_backdrop(self, AtlasFrontTheme.MAIN_MENU_BACKGROUND)
 	_build_ui()
 	AudioManager.attach_feedback(self)
 	AudioManager.start_music()
 
 func _build_ui() -> void:
-	var world_table := AtlasFrontWorldTable.new()
-	world_table.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	world_table.z_index = -10
-	add_child(world_table)
 	var frame := MarginContainer.new()
 	frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	frame.add_theme_constant_override("margin_left", 64)
@@ -38,9 +34,7 @@ func _build_ui() -> void:
 	menu.add_theme_constant_override("separation", 12)
 	menu_margin.add_child(menu)
 	menu.add_child(AtlasFrontTheme.section_label("COMMAND ROOM // PRIVATE MATCH"))
-	var title := AtlasFrontTheme.title_label("ATLAS // FRONT", 38)
-	title.add_theme_color_override("font_color", AtlasFrontTheme.CYAN_SOFT)
-	menu.add_child(title)
+	menu.add_child(AtlasFrontTheme.branding_texture(false, 320.0))
 	var subtitle := Label.new()
 	subtitle.text = "Eine eigene Welt. Ein autoritativer Host."
 	subtitle.add_theme_color_override("font_color", AtlasFrontTheme.TEXT_MUTED)
@@ -51,13 +45,13 @@ func _build_ui() -> void:
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint.add_theme_color_override("font_color", AtlasFrontTheme.TEXT_MUTED)
 	menu.add_child(hint)
-	menu.add_child(_button("Lobby erstellen", _on_create_lobby_pressed))
-	menu.add_child(_button("Lobby beitreten", _on_join_lobby_pressed))
-	menu.add_child(_button("Einstellungen", _on_settings_pressed))
+	menu.add_child(_button("Lobby erstellen", _on_create_lobby_pressed, "create_lobby"))
+	menu.add_child(_button("Lobby beitreten", _on_join_lobby_pressed, "join_lobby"))
+	menu.add_child(_button("Einstellungen", _on_settings_pressed, "settings"))
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	menu.add_child(spacer)
-	var exit := _button("Beenden", _on_exit_pressed)
+	var exit := _button("Beenden", _on_exit_pressed, "quit")
 	exit.modulate = Color(1, 1, 1, 0.82)
 	menu.add_child(exit)
 	version_label = Label.new()
@@ -78,15 +72,18 @@ func _build_ui() -> void:
 	var readout := VBoxContainer.new()
 	readout.add_theme_constant_override("separation", 8)
 	readout_margin.add_child(readout)
+	readout.add_child(AtlasFrontTheme.branding_texture(true, 72.0))
 	readout.add_child(AtlasFrontTheme.section_label("COMMAND TABLE // READY"))
 	readout.add_child(AtlasFrontTheme.title_label("THE FRONT IS YOURS", 22))
 	readout.add_child(_readout("01", "PRIVATE MATCH", "Invite-only host flow"))
 	readout.add_child(_readout("02", "42 TERRITORIES", "Readable first"))
 
-func _button(text: String, callback: Callable) -> Button:
+func _button(text: String, callback: Callable, icon_name: String = "") -> Button:
 	var button := Button.new()
 	button.text = text
 	button.custom_minimum_size = Vector2(0, 50)
+	if not icon_name.is_empty():
+		AtlasFrontTheme.apply_icon(button, icon_name, 28)
 	button.pressed.connect(callback)
 	return button
 

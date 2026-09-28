@@ -9,7 +9,9 @@ extends Control
 
 func _ready() -> void:
 	AtlasFrontTheme.install(self)
-	AtlasFrontTheme.add_backdrop(self)
+	AtlasFrontTheme.add_backdrop(self, AtlasFrontTheme.MAIN_MENU_BACKGROUND)
+	AtlasFrontTheme.apply_icon(get_node("Center/Panel/Margin/Content/Actions/Back"), "quit", 24)
+	AtlasFrontTheme.apply_icon(get_node("Center/Panel/Margin/Content/Actions/Save"), "ready", 24)
 	AudioManager.attach_feedback(self)
 	AudioManager.start_music()
 	player_name_input.text = SettingsManager.player_name

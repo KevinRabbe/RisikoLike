@@ -12,7 +12,7 @@ var waiting_for_backend := false
 
 func _ready() -> void:
 	AtlasFrontTheme.install(self)
-	AtlasFrontTheme.add_backdrop(self)
+	AtlasFrontTheme.add_backdrop(self, AtlasFrontTheme.LOBBY_BACKGROUND)
 	_build_ui()
 	AudioManager.attach_feedback(self)
 	AudioManager.start_music()
@@ -83,10 +83,12 @@ func _build_ui() -> void:
 	content.add_child(actions)
 	var back := Button.new()
 	back.text = "Zurück"
+	AtlasFrontTheme.apply_icon(back, "quit", 24)
 	back.pressed.connect(_on_back_pressed)
 	actions.add_child(back)
 	var create := Button.new()
 	create.text = "Lobby erstellen"
+	AtlasFrontTheme.apply_icon(create, "create_lobby", 24)
 	create.pressed.connect(_on_create_pressed)
 	actions.add_child(create)
 

@@ -31,6 +31,8 @@ var result_overlay: PanelContainer
 var result_overlay_label: Label
 var connection_overlay: PanelContainer
 var connection_overlay_label: Label
+var reconnect_backdrop: TextureRect
+var victory_backdrop: TextureRect
 var card_summary_label: Label
 
 func _process(_delta: float) -> void:
@@ -60,7 +62,12 @@ func _ready() -> void:
 
 func _build_ui() -> void:
 	AtlasFrontTheme.install(self)
-	AtlasFrontTheme.add_backdrop(self)
+	AtlasFrontTheme.add_backdrop(self, AtlasFrontTheme.LOBBY_BACKGROUND)
+	reconnect_backdrop = AtlasFrontTheme.add_state_backdrop(self, AtlasFrontTheme.RECONNECT_BACKDROP, 104.0, 324.0)
+	victory_backdrop = AtlasFrontTheme.add_state_backdrop(self, AtlasFrontTheme.VICTORY_BACKDROP)
+	victory_backdrop.set_anchors_preset(Control.PRESET_CENTER)
+	victory_backdrop.offset_top = -110
+	victory_backdrop.offset_bottom = 110
 	var top_bar_panel := PanelContainer.new()
 	top_bar_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	top_bar_panel.offset_left = 20
@@ -71,6 +78,7 @@ func _build_ui() -> void:
 	var top_bar := HBoxContainer.new()
 	top_bar.add_theme_constant_override("separation", 18)
 	top_bar_panel.add_child(top_bar)
+	top_bar.add_child(AtlasFrontTheme.branding_texture(true, 42.0))
 	var brand := AtlasFrontTheme.title_label("ATLAS // FRONT", 22)
 	brand.add_theme_color_override("font_color", AtlasFrontTheme.CYAN_SOFT)
 	top_bar.add_child(brand)
@@ -162,27 +170,33 @@ func _build_ui() -> void:
 	action_bar.add_child(actions)
 	primary_action = Button.new()
 	primary_action.text = "Aktion bestätigen"
+	AtlasFrontTheme.apply_icon(primary_action, "army", 24)
 	primary_action.custom_minimum_size = Vector2(190, 42)
 	primary_action.pressed.connect(_on_primary_action_pressed)
 	actions.add_child(primary_action)
 	trade_button = Button.new()
 	trade_button.text = "Kartenset tauschen"
+	AtlasFrontTheme.apply_icon(trade_button, "cards", 24)
 	trade_button.pressed.connect(_on_trade_pressed)
 	actions.add_child(trade_button)
 	reset_button = Button.new()
 	reset_button.text = "Verstärkungen zurücksetzen"
+	AtlasFrontTheme.apply_icon(reset_button, "warning", 24)
 	reset_button.pressed.connect(_on_reset_pressed)
 	actions.add_child(reset_button)
 	end_phase_button = Button.new()
 	end_phase_button.text = "Phase beenden"
+	AtlasFrontTheme.apply_icon(end_phase_button, "timer", 24)
 	end_phase_button.pressed.connect(_on_end_phase_pressed)
 	actions.add_child(end_phase_button)
 	end_turn_button = Button.new()
 	end_turn_button.text = "Zug beenden"
+	AtlasFrontTheme.apply_icon(end_turn_button, "ready", 24)
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
 	actions.add_child(end_turn_button)
 	var surrender_button := Button.new()
 	surrender_button.text = "Aufgeben"
+	AtlasFrontTheme.apply_icon(surrender_button, "quit", 24)
 	surrender_button.pressed.connect(_on_surrender_pressed)
 	actions.add_child(surrender_button)
 	surrender_dialog = ConfirmationDialog.new()
@@ -194,6 +208,7 @@ func _build_ui() -> void:
 	add_child(surrender_dialog)
 	spectator_button = Button.new()
 	spectator_button.text = "Zuschauen"
+	AtlasFrontTheme.apply_icon(spectator_button, "spectator", 24)
 	spectator_button.pressed.connect(_on_spectator_pressed)
 	actions.add_child(spectator_button)
 	var info_row := HBoxContainer.new()
@@ -232,8 +247,10 @@ func _build_lifecycle_overlays() -> void:
 	connection_overlay.offset_left = -250
 	connection_overlay.offset_top = 104
 	connection_overlay.offset_right = 250
-	connection_overlay.offset_bottom = 184
+	connection_overlay.offset_bottom = 324
 	connection_overlay.visible = false
+	connection_overlay.z_index = 3
+	connection_overlay.add_theme_stylebox_override("panel", AtlasFrontTheme.state_overlay_style())
 	add_child(connection_overlay)
 	connection_overlay_label = Label.new()
 	connection_overlay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -247,6 +264,8 @@ func _build_lifecycle_overlays() -> void:
 	result_overlay.offset_right = 250
 	result_overlay.offset_bottom = 110
 	result_overlay.visible = false
+	result_overlay.z_index = 3
+	result_overlay.add_theme_stylebox_override("panel", AtlasFrontTheme.state_overlay_style())
 	add_child(result_overlay)
 	var result_box := VBoxContainer.new()
 	result_box.add_theme_constant_override("separation", 12)
@@ -413,6 +432,8 @@ func _on_network_connection_changed(state: String) -> void:
 			result_label.text = "Wieder verbunden. Autoritativer Spielstand synchronisiert."
 	if connection_overlay != null:
 		connection_overlay.visible = state in ["disconnected", "reconnecting", "failed"]
+		if reconnect_backdrop != null:
+			reconnect_backdrop.visible = connection_overlay.visible
 		if connection_overlay.visible:
 			connection_overlay_label.text = "VERBINDUNG UNTERBROCHEN\n" + ("Wiederverbinden läuft …" if state != "failed" else "Reconnect-Fenster abgelaufen")
 	_refresh_ui()
@@ -474,12 +495,20 @@ func _refresh_ui() -> void:
 		status_label.text = "Partie beendet — Sieg: %s" % (winner.name if winner != null else game_state.winner_player_id)
 		if connection_overlay != null:
 			connection_overlay.visible = false
+		if reconnect_backdrop != null:
+			reconnect_backdrop.visible = false
+		if victory_backdrop != null:
+			victory_backdrop.visible = true
 		_show_result_overlay("MATCH COMPLETE\nSieg: %s" % (winner.name if winner != null else game_state.winner_player_id))
 	elif game_state.status == GameState.MatchStatus.TERMINATED:
 		result_label.text = ""
 		status_label.text = "Partie beendet: Host nicht verfügbar."
 		if connection_overlay != null:
 			connection_overlay.visible = false
+		if reconnect_backdrop != null:
+			reconnect_backdrop.visible = false
+		if victory_backdrop != null:
+			victory_backdrop.visible = false
 		_show_result_overlay("MATCH TERMINATED\nHost nicht verfügbar")
 	elif network_mode and NetworkManager.connection_state in ["disconnected", "reconnecting", "failed"]:
 		status_label.text = "Verbindung unterbrochen — Timer läuft weiter; Wiederverbinden wird versucht."
@@ -490,6 +519,8 @@ func _refresh_ui() -> void:
 		status_label.text = "Zuschauermodus — öffentliche Partieansicht, keine Spielaktionen."
 	else:
 		status_label.text = ""
+		if victory_backdrop != null:
+			victory_backdrop.visible = false
 	_refresh_timer()
 
 func _play_command_feedback(command_type: String, data: Dictionary) -> void:

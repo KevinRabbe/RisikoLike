@@ -13,7 +13,7 @@ var copy_button: Button
 
 func _ready() -> void:
 	AtlasFrontTheme.install(self)
-	AtlasFrontTheme.add_backdrop(self)
+	AtlasFrontTheme.add_backdrop(self, AtlasFrontTheme.LOBBY_BACKGROUND)
 	_build_ui()
 	AudioManager.attach_feedback(self)
 	AudioManager.start_music()
@@ -41,6 +41,7 @@ func _build_ui() -> void:
 	root.add_child(invite_label)
 	copy_button = Button.new()
 	copy_button.text = "Invite-Code kopieren"
+	AtlasFrontTheme.apply_icon(copy_button, "connection", 24)
 	copy_button.custom_minimum_size = Vector2(0, 44)
 	copy_button.pressed.connect(_on_copy_invite_pressed)
 	root.add_child(copy_button)
@@ -88,14 +89,17 @@ func _build_ui() -> void:
 	root.add_child(actions)
 	ready_button = Button.new()
 	ready_button.text = "Bereit"
+	AtlasFrontTheme.apply_icon(ready_button, "ready", 24)
 	ready_button.pressed.connect(_on_ready_pressed)
 	actions.add_child(ready_button)
 	start_button = Button.new()
 	start_button.text = "Match starten"
+	AtlasFrontTheme.apply_icon(start_button, "army", 24)
 	start_button.pressed.connect(_on_start_pressed)
 	actions.add_child(start_button)
 	var leave := Button.new()
 	leave.text = "Lobby verlassen"
+	AtlasFrontTheme.apply_icon(leave, "quit", 24)
 	leave.pressed.connect(_on_leave_pressed)
 	actions.add_child(leave)
 
