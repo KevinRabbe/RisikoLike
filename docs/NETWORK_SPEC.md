@@ -9,10 +9,11 @@
 - `FIX` Private Online-Partien für 2–5 Spieler.
 - `FIX` Ein Spieler ist Host und gleichzeitig autoritative Spielinstanz.
 - `FIX` Clients senden nur Aktionen/Intents; der Host validiert und verändert den Game State.
-- `FIX` Invite-Code statt manueller IP-Eingabe im normalen Nutzerfluss.
+- `FIX` Self-contained Invite statt zentraler Lobby-Auflösung im normalen Nutzerfluss.
 - `FIX` Kein Account-Zwang für V1.
 - `FIX` Kein Dedicated Game Server für V1.
-- `FIX` Ein kleiner öffentlicher Rendezvous-/Signaling-Service vermittelt Sessions.
+- `FIX` V1 private Lobbys benötigen keinen öffentlichen Rendezvous-/Signaling-Service.
+- `FIX` Ein optionaler Direct-Address-Pfad unterstützt LAN, Port Forwarding und Debugging.
 - `FIX` Das Ruleset wird vor Matchstart festgelegt und danach immutable.
 
 ## 2. V1-Technologieentscheidungen
@@ -20,11 +21,9 @@
 - `FIX` Godot 4.7.2 stable als initial festgeschriebene Engine-Version.
 - `FIX` Windows x86_64 als primäres V1-Target.
 - `FIX` GDScript für den Game Client.
-- `FIX` WebRTC als Internet-Game-Transport.
-- `FIX` HTTPS + WSS für Backend und Signaling.
-- `FIX` ICE/STUN für NAT-Traversal.
-- `FIX` TURN als Relay-Fallback.
-- `FIX` Kein manuelles Port-Forwarding im normalen Nutzerfluss.
+- `FIX` Reliable ordered TCP als V1 Direct-Host-Transport auf Default-Port `43100`.
+- `OPTIONAL` WebRTC, HTTPS/WSS, ICE/STUN und TURN für den retained central-service path.
+- `CONFIG` UPnP-TCP-Portmapping als Komfortfunktion; manuelles Forwarding bleibt Fallback.
 - `FIX` Host-authoritative Game Session.
 - `SPÄTER` Optional ENet/LAN/Direct Connect.
 
@@ -34,16 +33,13 @@ Engine-Upgrades erfolgen bewusst und werden separat getestet; während einer Imp
 
 ```text
 Host Godot Client
-   | HTTPS/WSS
+   | TCP :43100 (configurable)
    v
-Rendezvous + Signaling Backend
-   ^
-   | HTTPS/WSS
 Guest Godot Client
 
+Optional/future:
 Host <------ WebRTC direct ------> Guest
-  oder
-Host <-------- TURN relay -------> Guest
+  über retained central signaling / optional TURN
 ```
 
 Der Backend-Service verwaltet keinen autoritativen Game State.
@@ -51,28 +47,21 @@ Der Backend-Service verwaltet keinen autoritativen Game State.
 ## 4. Invite-Code Flow
 
 1. Host klickt `Lobby erstellen`.
-2. Backend registriert Lobby und erzeugt Lobby-ID, Invite-Code und Host-Token.
-3. Host verbindet sich mit dem Signaling-Service.
-4. Gast gibt Invite-Code ein.
-5. Backend löst Code auf und erzeugt kurzlebiges Join-Token.
-6. Gast verbindet sich mit Signaling.
-7. Offer/Answer und ICE-Candidates werden vermittelt.
-8. WebRTC versucht direkte Peer-Verbindung.
-9. Falls erforderlich wird TURN verwendet.
-10. Host authentifiziert den Game Join.
-11. Host sendet Lobby-State und Ruleset.
-12. Gast erscheint in der Lobby.
+2. Der Host startet lokal den TCP-Listener.
+3. Der Host erzeugt eine neue Session-ID und ein zufälliges Join-Secret.
+4. Der Host zeigt einen `AF1.…`-Invite mit Endpoint, Port und Checksumme.
+5. Der Gast fügt den Invite ein oder verwendet die Direct-Address-Eingabe.
+6. Der Host validiert Session, Version, Kapazität und Join-Secret.
+7. Der Host weist die Player-ID zu und sendet Lobby-State und Ruleset.
+8. Der Gast erscheint in der Lobby.
 
 ## 5. Invite-Code Format
 
-- `FIX` 6 Zeichen.
-- `FIX` Darstellung `ABC-123`.
-- `FIX` Alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`.
-- `FIX` Case-insensitive Eingabe.
-- `FIX` Invite-Code ist kein Authentifizierungsgeheimnis.
-- `FIX` Kollisionen werden serverseitig behandelt.
-- `FIX` Nach Lobby-Ende ungültig.
-- `FIX` Nach Matchstart keine normalen Late Joins.
+- `FIX` Format `AF1.<base64url-payload>.<8-stellige SHA-256-Prüfsumme>`.
+- `FIX` Payload enthält Format-, Spiel- und Protokollversion, Endpoint, Port,
+  Session-ID und zufälliges Join-Secret.
+- `FIX` Checksumme erkennt Übertragungs-/Tippfehler; das Join-Secret autorisiert.
+- `FIX` Invite wird nach Lobby-Close ungültig; normale Late Joins bleiben gesperrt.
 
 ## 6. Lobby State
 
@@ -359,3 +348,40 @@ INTERNAL_ERROR
 - Inkompatible Clients erhalten definierten Fehler.
 - TURN-Fallback wurde real über getrennte Internetanschlüsse getestet.
 - Host-Verlust wird gemäß V1-Regel behandelt.
+
+## V1 Direct-Host Architecture
+
+V1 private lobbies default to `DIRECT_HOST`. The player creating the lobby is
+the authoritative host and also a player in the match. The packaged client
+does not require a central service, Python process, account, or lobby lookup.
+
+The default transport is reliable, ordered TCP on port `43100` (configurable).
+The host listener binds `0.0.0.0:<port>`; LAN and manually forwarded Internet
+connections are supported. Existing `LocalNetworkTransport` remains available
+for loopback test fixtures. The existing WebRTC transport is retained as an
+optional central-service/future NAT traversal path and is not the V1 default.
+
+### Self-contained invite
+
+Direct invites use the format `AF1.<base64url-payload>.<checksum>`. The payload
+contains the invite format version, product/protocol versions, advertised host
+address, TCP port, fresh session ID, and a cryptographically random join
+secret. The checksum detects copy/paste corruption; the join secret is the
+actual capability. Invite and reconnect credentials are never interchangeable.
+
+The host validates session, protocol, product version, lobby state, capacity,
+and join secret before assigning a player identity. Invalid, expired, closed,
+or malformed invites receive controlled errors and do not crash the host.
+
+### Connectivity and limitations
+
+The host may attempt TCP UPnP port mapping when available; failure never blocks
+local lobby creation. The UI distinguishes direct/LAN readiness from an
+Internet guarantee and provides the configured address and port for manual
+forwarding. No external “what is my IP” service is hardcoded. CGNAT and
+restrictive routers can prevent direct Internet hosting.
+
+Reconnect credentials are generated and stored by the host as hashes, rotated
+per generation, expire with the match reconnect window, and are replay-safe.
+Host process loss is terminal; clients receive `HOST_UNAVAILABLE` and
+`TERMINATED`. There is no host migration in V1.

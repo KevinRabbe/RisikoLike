@@ -32,13 +32,19 @@
 # 2. Designprinzipien
 
 - `FIX` Ein Spieler hostet die Partie; der Host ist autoritativ für den Game State.
+- `FIX` V1 private Lobbys sind player-hosted/direct und benötigen keinen zentralen Server.
 - `FIX` Andere Spieler treten über einen Invite-Code bei.
+- `FIX` Der V1-Invite ist self-contained (`AF1`) und enthält Endpoint, Port und Join-Berechtigung.
 - `FIX` Clients senden Aktionen/Intents; sie bestimmen keine autoritativen Ergebnisse.
 - `FIX` Regeln und Game State sind von Darstellung/UI getrennt.
 - `FIX` Keine kommerziellen Originalgrafiken, Logos oder wörtlich kopierten Regel-/Kartentexte.
 - `FIX` Sinnvolle Regelvarianten werden als Lobby-`CONFIG` statt als Hardcode umgesetzt.
 - `FIX` Das Ruleset wird bei Matchstart gesperrt und danach nicht mehr verändert.
 - `V1` Fokus auf einen stabilen Kernmodus.
+
+Der bestehende FastAPI-/WebRTC-Pfad bleibt als optionaler zukünftiger Service-
+Prototyp erhalten. Matchmaking, Accounts, Ranked, Relay und globale Lobby-
+Dienste sind weiterhin keine V1-Voraussetzungen.
 
 # 3. Scope V1
 

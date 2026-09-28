@@ -69,7 +69,7 @@ Elemente:
 - `Einstellungen`
 - `Beenden`
 - Versionsnummer
-- optional Verbindungs-/Backendstatus
+- optional Direct-/Connectivitystatus
 
 ## 5. Create Lobby
 
@@ -110,7 +110,7 @@ Elemente:
 
 - Spielername
 - Invite-Code Input
-- Codeformat `ABC-123`
+- Codeformat `AF1.<payload>.<checksum>`
 - `Beitreten`
 - `Zurück`
 - Loading State
@@ -636,9 +636,8 @@ Benötigt für:
 
 - Lobby erstellen
 - Lobby beitreten
-- Backend kontaktieren
-- Signaling
-- WebRTC verbinden
+- Direct TCP Listener starten
+- Direct TCP verbinden
 - Match starten
 - Snapshot synchronisieren
 - Reconnect

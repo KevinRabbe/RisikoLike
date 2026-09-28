@@ -1,6 +1,6 @@
 # RisikoLike — Backend & Signaling Specification
 
-> **Status:** Pre-Production / Backend Architecture  
+> **Status:** Optional / Future Central Services Prototype
 > **Dokumentversion:** 0.1  
 > **Bezug:** `docs/GDD.md`, `docs/NETWORK_SPEC.md`  
 > **Ziel:** Definition des minimalen V1-Backends für Invite-Codes, WebRTC-Signaling, Session-Tokens, Lobby-Lebenszyklus und TURN-Fallback.
@@ -9,13 +9,11 @@
 
 - `FIX` Die eigentliche Partie bleibt host-authoritativ auf dem PC des Lobby-Hosts.
 - `FIX` Das Backend ist kein autoritativer Game Server.
-- `FIX` V1 verwendet WebRTC für die Peer-Verbindungen der Game Session.
-- `FIX` Signaling erfolgt über einen zentralen öffentlichen Service.
-- `FIX` STUN wird für ICE/NAT-Traversal verwendet.
-- `FIX` TURN steht als Relay-Fallback zur Verfügung, wenn keine direkte Peer-Verbindung möglich ist.
-- `FIX` Normale Spieler müssen keine Ports am Router freigeben.
-- `FIX` Invite-Code wird ausschließlich über den Backend-Service aufgelöst.
-- `SPÄTER` Optionaler LAN-/Direct-Connect-Modus.
+- `FIX` V1 private Lobbys verwenden standardmäßig Direct Host über TCP.
+- `OPTIONAL` WebRTC, STUN und TURN bleiben für spätere/explicit central-service modes erhalten.
+- `OPTIONAL` HTTPS/WSS betrifft ausschließlich diesen zentralen Signaling-Pfad.
+- `FIX` Direct Host darf keinen Backend-Service voraussetzen.
+- `FIX` Self-contained Direct Invites werden lokal vom Host erzeugt und validiert.
 - `SPÄTER` Dedicated Game Server.
 
 ## 2. Verantwortlichkeiten
@@ -35,6 +33,9 @@
 - TURN-Zugangsdaten ausgeben, falls erforderlich
 - Rate Limiting
 - Protokoll-/Build-Metadaten prüfen
+
+Diese Verantwortlichkeiten gelten nur, wenn der optionale Backend-/WebRTC-Modus
+explizit aktiviert wird. Sie gehören nicht zum normalen V1-Create-/Join-Flow.
 
 ### Backend ausdrücklich nicht verantwortlich für
 
@@ -563,3 +564,14 @@ Vor Implementierung des Produktionsbackends:
 - Protocol-/Version-Mismatch wird sauber abgelehnt.
 - Tokens erscheinen nicht in Produktionslogs.
 - Backend enthält keinen autoritativen Game State.
+
+## V1 Status: optional / future central services prototype
+
+Das Backend bleibt im Repository und wird für den bestehenden WebRTC-/Rendezvous-
+Pfad getestet. Es ist jedoch **keine Voraussetzung** für private V1-Lobbys.
+Der normale Clientflow verwendet `DIRECT_HOST` über TCP und führt keinen
+Lookup gegen `http://127.0.0.1:8000` aus.
+
+Spätere optionale Anwendungen sind Matchmaking, Ranked/MMR, Accounts,
+Leaderboards, globale Lobby-Dienste, Moderation oder ein offizieller Relay-
+Service. Diese Dienste werden durch den Direct-Host-Pivot nicht vorgezogen.

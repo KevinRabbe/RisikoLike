@@ -728,3 +728,22 @@ Das Projektgrundgerüst gilt als fertig, wenn:
 - Commands können hostseitig validiert werden
 - Unit-Test-Grundgerüst läuft
 - keine Domain-Klasse von einer konkreten UI-Szene abhängt
+
+## V1 private-host networking
+
+`NetworkManager` selects `DIRECT_HOST` for the normal Create Lobby and Join
+flow. `DirectNetworkTransport` provides reliable ordered TCP with a stable
+configurable default port (`43100`). The host owns the authoritative
+`GameState`, `LobbyState`, RNG, validation, player slots, and local reconnect
+registry. The existing command, snapshot, revision, privacy, timer, and host-
+loss layers remain unchanged.
+
+`DirectInvite` encodes a versioned, self-contained `AF1` invite containing the
+advertised endpoint, session identity, join capability, protocol/product
+versions, and checksum. The host assigns player IDs only after validating the
+invite and handshake. Reconnect tokens are host-issued, hashed at rest,
+rotated by generation, and separate from the invite join secret.
+
+`BackendClient` and `WebRTCNetworkTransport` remain available for explicit
+development/future central-service modes. They are not initialized as a
+requirement of the V1 direct lobby flow.
