@@ -30,6 +30,7 @@ func _ready() -> void:
 		game_state = NetworkManager.game_state
 		NetworkManager.command_result_received.connect(_on_network_command_result)
 		NetworkManager.state_snapshot_changed.connect(_on_network_snapshot_changed)
+		NetworkManager.connection_changed.connect(_on_network_connection_changed)
 	else:
 		var player_count := int(get_tree().get_meta("local_player_count", 2))
 		game_state = GameState.create_local(clampi(player_count, 2, 5), 424242)
@@ -256,6 +257,18 @@ func _on_network_snapshot_changed(_snapshot: GameStateSnapshot) -> void:
 	game_state = NetworkManager.game_state
 	_refresh_ui()
 
+func _on_network_connection_changed(state: String) -> void:
+	match state:
+		"disconnected":
+			result_label.text = "Verbindung unterbrochen. Wiederverbinden wird versucht …"
+		"reconnecting":
+			result_label.text = "Wiederverbinden …"
+		"failed":
+			result_label.text = "Wiederverbinden fehlgeschlagen: Partie verlassen oder Fenster abgelaufen."
+		"in_game":
+			result_label.text = "Wieder verbunden. Autoritativer Spielstand synchronisiert."
+	_refresh_ui()
+
 func _refresh_ui() -> void:
 	if map_controller != null:
 		if map_controller.grid == null:
@@ -277,7 +290,7 @@ func _refresh_ui() -> void:
 		player_panel.add_child(player_row)
 	selection_label.text = "Auswahl: %s -> %s" % [source_id if not source_id.is_empty() else "—", target_id if not target_id.is_empty() else "—"]
 	var reinforcement_phase := game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT
-	var can_act := not network_mode or game_state.turn_state.active_player_id == local_player_id
+	var can_act := not network_mode or (NetworkManager.connection_state == "in_game" and game_state.turn_state.active_player_id == local_player_id)
 	reset_button.visible = reinforcement_phase
 	trade_button.visible = can_act and (game_state.turn_state.phase == TurnState.Phase.CARD_TRADE or game_state.forced_trade_player_id == game_state.turn_state.active_player_id)
 	if network_mode:

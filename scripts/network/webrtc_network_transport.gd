@@ -68,6 +68,26 @@ func connect_to_host(_address: String, _port: int) -> bool:
 		return false
 	return true
 
+func connect_for_reconnect(player_id: String, generation: int) -> bool:
+	if not _can_start():
+		transport_error.emit("BACKEND_NOT_CONFIGURED")
+		return false
+	close()
+	_is_host = false
+	var result: Dictionary = backend_client.connect_signaling_as_reconnect(lobby_id, session_token, signaling_url, player_id, generation)
+	if not bool(result.get("ok", false)):
+		transport_error.emit(str(result.get("code", "SIGNALING_UNAVAILABLE")))
+		return false
+	return true
+
+func reject_reconnect(peer_id: int, code: String) -> void:
+	if backend_client == null or not _signaling_connected:
+		return
+	backend_client.send_signaling_message({
+		"type": "RECONNECT_REJECTED",
+		"payload": {"code": code},
+	})
+
 func send(peer_id: int, serialized_message: String) -> bool:
 	if _data_channel == null or not _ready_emitted:
 		return false
@@ -86,15 +106,28 @@ func poll() -> void:
 			packet_received.emit(HOST_PEER_ID if _is_host else CLIENT_PEER_ID, packet.get_string_from_utf8())
 
 func close() -> void:
+	reset_peer_connection()
+	_signaling_connected = false
+	if backend_client != null:
+		backend_client.disconnect_signaling()
+
+func detach_backend_signals() -> void:
+	if backend_client == null:
+		return
+	if backend_client.signaling_message_received.is_connected(_on_signaling_message):
+		backend_client.signaling_message_received.disconnect(_on_signaling_message)
+	if backend_client.signaling_connected.is_connected(_on_signaling_connected):
+		backend_client.signaling_connected.disconnect(_on_signaling_connected)
+	if backend_client.signaling_disconnected.is_connected(_on_signaling_disconnected):
+		backend_client.signaling_disconnected.disconnect(_on_signaling_disconnected)
+
+func reset_peer_connection() -> void:
 	_ready_emitted = false
 	_remote_peer_id = 0
-	_signaling_connected = false
 	_data_channel = null
 	if _peer_connection != null:
 		_peer_connection.close()
-	_peer_connection = null
-	if backend_client != null:
-		backend_client.disconnect_signaling()
+		_peer_connection = null
 
 func peer_ids() -> Array[int]:
 	if _ready_emitted:
@@ -109,8 +142,9 @@ func _on_signaling_connected() -> void:
 
 func _on_signaling_disconnected() -> void:
 	_signaling_connected = false
-	if _ready_emitted:
-		_ready_emitted = false
+	var was_ready := _ready_emitted
+	reset_peer_connection()
+	if was_ready:
 		peer_disconnected.emit(HOST_PEER_ID if _is_host else CLIENT_PEER_ID)
 
 func _on_signaling_message(message: Dictionary) -> void:
@@ -123,6 +157,15 @@ func _on_signaling_message(message: Dictionary) -> void:
 				_peer_connection.create_offer()
 		"PEER_JOINING":
 			if _is_host:
+				_ensure_peer_connection()
+		"PEER_RECONNECTING":
+			if _is_host:
+				reset_peer_connection()
+				peer_identity_received.emit(
+					HOST_PEER_ID,
+					str(message.get("player_id", "")),
+					int(message.get("connection_generation", 0)),
+				)
 				_ensure_peer_connection()
 		"WEBRTC_OFFER":
 			_ensure_peer_connection()
@@ -138,9 +181,14 @@ func _on_signaling_message(message: Dictionary) -> void:
 			if _peer_connection != null:
 				_peer_connection.add_ice_candidate(str(candidate_payload.get("media", "0")), int(candidate_payload.get("index", 0)), str(candidate_payload.get("candidate", "")))
 		"PEER_LEFT":
-			if _ready_emitted:
-				_ready_emitted = false
+			var was_ready := _ready_emitted
+			reset_peer_connection()
+			if was_ready:
 				peer_disconnected.emit(HOST_PEER_ID if _is_host else CLIENT_PEER_ID)
+		"RECONNECT_REJECTED":
+			var reject_payload: Dictionary = message.get("payload", {})
+			transport_error.emit(str(reject_payload.get("code", "RECONNECT_FAILED")))
+			close()
 		"AUTH_ERROR", "ERROR":
 			transport_error.emit(BackendErrorMapper.to_game_code(str((message.get("error", {}) as Dictionary).get("code", "SIGNALING_ERROR"))))
 

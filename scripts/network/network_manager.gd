@@ -28,6 +28,12 @@ var _backend_pending_name := ""
 var _backend_pending_max_players := 2
 var _backend_pending_ruleset: Ruleset
 var _backend_heartbeat_elapsed := 0.0
+var _reconnect_elapsed := 0.0
+var _reconnect_attempts := 0
+var _reconnect_request_pending := false
+var _reconnect_transport_pending := false
+var _pending_peer_identities: Dictionary = {}
+var _issued_reconnect_generations: Dictionary = {}
 
 var _pending_join_name := ""
 var _peer_to_player: Dictionary = {}
@@ -39,6 +45,9 @@ func _ready() -> void:
 	if backend != null:
 		backend.lobby_created.connect(_on_backend_lobby_created)
 		backend.lobby_resolved.connect(_on_backend_lobby_resolved)
+		backend.lobby_started.connect(_on_backend_lobby_started)
+		backend.reconnect_credential_received.connect(_on_backend_reconnect_credential)
+		backend.reconnect_authorized.connect(_on_backend_reconnect_authorized)
 		backend.backend_request_failed.connect(_on_backend_request_failed)
 
 func _process(delta: float) -> void:
@@ -51,11 +60,33 @@ func _process(delta: float) -> void:
 			var backend := get_node_or_null("/root/BackendClient")
 			if backend != null:
 				backend.heartbeat()
+	if role == Role.CLIENT and game_state != null and connection_state in ["disconnected", "reconnecting"]:
+		_reconnect_elapsed += delta
+		if _reconnect_elapsed >= float(game_state.ruleset.reconnect_timeout_seconds):
+			if connection_state != "failed":
+				set_connection_state("failed")
+				network_error.emit("RECONNECT_WINDOW_EXPIRED")
+		elif not _reconnect_request_pending and not _reconnect_transport_pending and _reconnect_elapsed >= _next_reconnect_delay():
+			_attempt_reconnect()
 
 func set_connection_state(next_state: String) -> void:
 	if connection_state == next_state:
 		return
 	connection_state = next_state
+	if is_inside_tree():
+		var session := get_node_or_null("/root/SessionManager")
+		if session != null:
+			match next_state:
+				"in_game", "joined", "hosting":
+					session.connection_state = session.ConnectionState.CONNECTED
+				"disconnected":
+					session.connection_state = session.ConnectionState.DISCONNECTED
+				"reconnecting":
+					session.connection_state = session.ConnectionState.RECONNECTING
+				"failed":
+					session.connection_state = session.ConnectionState.FAILED
+				_:
+					session.connection_state = session.ConnectionState.OFFLINE
 	connection_changed.emit(connection_state)
 
 func host_local_lobby(player_name: String, max_players: int, p_ruleset: Ruleset = null, port: int = DEFAULT_LOCAL_PORT) -> Dictionary:
@@ -164,7 +195,81 @@ func _on_backend_lobby_resolved(data: Dictionary) -> void:
 		network_error.emit("SIGNALING_UNAVAILABLE")
 	_backend_pending_role = ""
 
+func _on_backend_lobby_started(_data: Dictionary) -> void:
+	if role != Role.HOST or not backend_mode or lobby_state == null:
+		return
+	var backend := get_node_or_null("/root/BackendClient")
+	if backend == null:
+		return
+	for player_id: String in _sorted_player_ids(lobby_state.players):
+		if player_id != local_player_id:
+			backend.request_reconnect_credential(player_id)
+
+func _on_backend_reconnect_credential(data: Dictionary) -> void:
+	if role != Role.HOST or game_state == null:
+		return
+	var player_id := str(data.get("player_id", ""))
+	var reconnect_token := str(data.get("reconnect_token", ""))
+	if player_id.is_empty() or reconnect_token.is_empty() or player_id == local_player_id:
+		return
+	var peer_id := 0
+	for candidate_peer_id in _peer_to_player:
+		if str(_peer_to_player[candidate_peer_id]) == player_id:
+			peer_id = int(candidate_peer_id)
+			break
+	if peer_id == 0:
+		return
+	_issued_reconnect_generations[player_id] = int(data.get("generation", 1))
+	_send_message(peer_id, NetworkMessage.new(NetworkMessage.RECONNECT_CREDENTIAL, {
+		"match_id": str(data.get("match_id", match_id)),
+		"player_id": player_id,
+		"reconnect_token": reconnect_token,
+		"expires_at": str(data.get("expires_at", "")),
+		"connection_generation": int(data.get("generation", 1)),
+	}, match_id))
+
+func _on_backend_reconnect_authorized(data: Dictionary) -> void:
+	if role != Role.CLIENT or game_state == null:
+		return
+	var player_id := str(data.get("player_id", ""))
+	var generation := int(data.get("generation", 0))
+	var ticket := str(data.get("reconnect_ticket", ""))
+	if player_id != local_player_id or ticket.is_empty() or generation <= 0:
+		_reconnect_request_pending = false
+		set_connection_state("failed")
+		network_error.emit("RECONNECT_FAILED")
+		return
+	var session := get_node_or_null("/root/SessionManager")
+	var rotated_token := str(data.get("reconnect_token", ""))
+	if session != null:
+		session.set_reconnect_credentials(match_id, local_player_id, rotated_token, str(data.get("expires_at", "")), generation)
+	var backend := get_node_or_null("/root/BackendClient")
+	var next_transport := WebRTCNetworkTransport.new()
+	next_transport.configure(backend, match_id, ticket, str(data.get("signaling_url", "")), data.get("ice_servers", []), false)
+	if not _replace_transport(next_transport):
+		_reconnect_request_pending = false
+		set_connection_state("failed")
+		network_error.emit("RECONNECT_FAILED")
+		return
+	_reconnect_request_pending = false
+	_reconnect_transport_pending = true
+	set_connection_state("reconnecting")
+	if not next_transport.connect_for_reconnect(local_player_id, generation):
+		_reconnect_transport_pending = false
+		_reconnect_attempts += 1
+		set_connection_state("disconnected")
+		network_error.emit("RECONNECT_FAILED")
+
 func _on_backend_request_failed(operation: String, code: String) -> void:
+	if operation == "authorize_reconnect":
+		_reconnect_request_pending = false
+		_reconnect_attempts += 1
+		if _reconnect_elapsed >= float(game_state.ruleset.reconnect_timeout_seconds):
+			set_connection_state("failed")
+		else:
+			set_connection_state("disconnected")
+		network_error.emit(BackendErrorMapper.to_game_code(code))
+		return
 	if _backend_pending_role.is_empty():
 		return
 	network_error.emit(BackendErrorMapper.to_game_code("%s:%s" % [operation, code]))
@@ -294,6 +399,16 @@ func start_match(seed_value: int = 424242) -> Dictionary:
 	print("[GAME] match started lobby=%s revision=%d" % [lobby_id, game_state.state_revision])
 	return {"ok": true, "code": "OK", "match_id": match_id}
 
+func begin_manual_reconnect() -> Dictionary:
+	if role != Role.CLIENT or game_state == null:
+		return {"ok": false, "code": "NOT_CLIENT"}
+	_reconnect_elapsed = 0.0
+	_reconnect_attempts = 0
+	_reconnect_request_pending = false
+	_reconnect_transport_pending = false
+	set_connection_state("disconnected")
+	return {"ok": true, "code": "RECONNECTING"}
+
 func request_snapshot() -> Dictionary:
 	if role != Role.CLIENT:
 		return {"ok": false, "code": "NOT_CLIENT"}
@@ -368,6 +483,12 @@ func shutdown() -> void:
 	_backend_pending_name = ""
 	_backend_pending_ruleset = null
 	_backend_heartbeat_elapsed = 0.0
+	_reconnect_elapsed = 0.0
+	_reconnect_attempts = 0
+	_reconnect_request_pending = false
+	_reconnect_transport_pending = false
+	_pending_peer_identities.clear()
+	_issued_reconnect_generations.clear()
 	backend_mode = false
 	_sync_session()
 	connection_changed.emit(connection_state)
@@ -376,17 +497,50 @@ func _replace_transport(next_transport: NetworkTransport) -> bool:
 	if next_transport == null:
 		return false
 	if transport != null:
+		if transport.packet_received.is_connected(_on_packet_received):
+			transport.packet_received.disconnect(_on_packet_received)
+		if transport.peer_connected.is_connected(_on_peer_connected):
+			transport.peer_connected.disconnect(_on_peer_connected)
+		if transport.peer_disconnected.is_connected(_on_peer_disconnected):
+			transport.peer_disconnected.disconnect(_on_peer_disconnected)
+		if transport.peer_identity_received.is_connected(_on_peer_identity_received):
+			transport.peer_identity_received.disconnect(_on_peer_identity_received)
+		if transport.transport_error.is_connected(_on_transport_error):
+			transport.transport_error.disconnect(_on_transport_error)
+		if transport is WebRTCNetworkTransport:
+			(transport as WebRTCNetworkTransport).detach_backend_signals()
 		transport.close()
 	transport = next_transport
 	transport.packet_received.connect(_on_packet_received)
 	transport.peer_connected.connect(_on_peer_connected)
 	transport.peer_disconnected.connect(_on_peer_disconnected)
+	transport.peer_identity_received.connect(_on_peer_identity_received)
 	transport.transport_error.connect(_on_transport_error)
 	return true
 
 func _on_peer_connected(peer_id: int) -> void:
 	print("[NETWORK] peer connected peer=%d role=%s" % [peer_id, Role.keys()[role]])
-	if role == Role.CLIENT and peer_id == 1:
+	if role == Role.HOST and _pending_peer_identities.has(peer_id):
+		var identity: Dictionary = _pending_peer_identities[peer_id]
+		var player_id := str(identity.get("player_id", ""))
+		var generation := int(identity.get("generation", 0))
+		var lobby_player := lobby_state.get_player(player_id) if lobby_state != null else null
+		var expected_generation := int(_issued_reconnect_generations.get(player_id, 0))
+		if lobby_player == null or lobby_player.connection_state != "DISCONNECTED" or generation != expected_generation + 1:
+			if transport is WebRTCNetworkTransport:
+				(transport as WebRTCNetworkTransport).reject_reconnect(peer_id, "RECONNECT_FAILED")
+			_pending_peer_identities.erase(peer_id)
+			return
+		_peer_to_player[peer_id] = player_id
+		_pending_peer_identities.erase(peer_id)
+		_issued_reconnect_generations[player_id] = generation
+		lobby_player.network_peer_id = peer_id
+		lobby_player.connection_state = "CONNECTED"
+		_broadcast_lobby()
+		_send_snapshot_to_peer(peer_id, player_id, NetworkMessage.STATE_SNAPSHOT)
+		peer_changed.emit(player_id, true)
+		return
+	if role == Role.CLIENT and peer_id == 1 and not _reconnect_transport_pending:
 		_send_message(1, NetworkMessage.new(NetworkMessage.JOIN_REQUEST, {
 			"player_name": _pending_join_name,
 			"protocol_version": App.PROTOCOL_VERSION,
@@ -396,16 +550,44 @@ func _on_peer_connected(peer_id: int) -> void:
 func _on_peer_disconnected(peer_id: int) -> void:
 	var player_id := str(_peer_to_player.get(peer_id, ""))
 	if not player_id.is_empty() and lobby_state != null and role == Role.HOST:
+		if game_state != null and not match_id.is_empty():
+			var lobby_player := lobby_state.get_player(player_id)
+			if lobby_player != null:
+				lobby_player.network_peer_id = 0
+				lobby_player.connection_state = "DISCONNECTED"
+			_peer_to_player.erase(peer_id)
+			_broadcast_lobby()
+			peer_changed.emit(player_id, false)
+			return
 		lobby_state.remove_player(player_id)
 		_peer_to_player.erase(peer_id)
 		_broadcast_lobby()
 		peer_changed.emit(player_id, false)
-	if role == Role.CLIENT and connection_state != "offline":
+	if role == Role.CLIENT and connection_state != "offline" and game_state != null:
+		_reconnect_elapsed = 0.0
+		_reconnect_attempts = 0
+		_reconnect_request_pending = false
+		_reconnect_transport_pending = false
 		set_connection_state("disconnected")
 		network_error.emit("PEER_DISCONNECTED")
 
 func _on_transport_error(code: String) -> void:
+	if role == Role.CLIENT and connection_state == "reconnecting":
+		_reconnect_transport_pending = false
+		_reconnect_attempts += 1
+		set_connection_state("disconnected")
 	network_error.emit(code)
+
+func _on_peer_identity_received(peer_id: int, player_id: String, generation: int) -> void:
+	if role != Role.HOST or lobby_state == null or game_state == null:
+		return
+	var lobby_player := lobby_state.get_player(player_id)
+	var expected_generation := int(_issued_reconnect_generations.get(player_id, 0))
+	if lobby_player == null or lobby_player.connection_state != "DISCONNECTED" or generation != expected_generation + 1:
+		if transport is WebRTCNetworkTransport:
+			(transport as WebRTCNetworkTransport).reject_reconnect(peer_id, "RECONNECT_FAILED")
+		return
+	_pending_peer_identities[peer_id] = {"player_id": player_id, "generation": generation}
 
 func _on_packet_received(peer_id: int, serialized_message: String) -> void:
 	var decoded := NetworkSerializer.decode_message(serialized_message)
@@ -447,6 +629,15 @@ func _handle_client_message(message: NetworkMessage) -> void:
 			_sync_session()
 		NetworkMessage.JOIN_REJECTED:
 			network_error.emit(str(message.payload.get("code", "JOIN_REJECTED")))
+		NetworkMessage.RECONNECT_CREDENTIAL:
+			var credential_player_id := str(message.payload.get("player_id", ""))
+			var reconnect_token := str(message.payload.get("reconnect_token", ""))
+			if credential_player_id != local_player_id or reconnect_token.is_empty() or str(message.payload.get("match_id", "")) != match_id:
+				network_error.emit("RECONNECT_TOKEN_INVALID")
+				return
+			var session := get_node_or_null("/root/SessionManager")
+			if session != null:
+				session.set_reconnect_credentials(match_id, local_player_id, reconnect_token, str(message.payload.get("expires_at", "")), int(message.payload.get("connection_generation", 1)))
 		NetworkMessage.LOBBY_SNAPSHOT:
 			var snapshot := LobbySnapshot.from_dict(message.payload.get("lobby", {}))
 			if snapshot != null:
@@ -549,11 +740,18 @@ func _apply_snapshot_message(message: NetworkMessage) -> void:
 	match_id = game_state.match_id
 	if lobby_state != null:
 		lobby_state.status = LobbyState.Status.IN_GAME
+	var was_reconnecting := _reconnect_transport_pending or connection_state == "reconnecting"
+	_reconnect_transport_pending = false
+	_reconnect_request_pending = false
+	_reconnect_elapsed = 0.0
+	_reconnect_attempts = 0
 	set_connection_state("in_game")
 	_sync_session()
 	state_snapshot_changed.emit(snapshot)
 	if message.message_type == NetworkMessage.MATCH_STARTED:
 		match_started.emit(game_state)
+	if was_reconnecting and game_state.status == GameState.MatchStatus.FINISHED:
+		network_error.emit("MATCH_FINISHED")
 
 func _handle_command_result(message: NetworkMessage) -> void:
 	var result := CommandResult.from_dict(message.payload.get("result", {}))
@@ -614,6 +812,35 @@ func _sync_session() -> void:
 	session_node.player_id = local_player_id
 	session_node.lobby_id = lobby_id
 	session_node.match_id = match_id
+
+func _next_reconnect_delay() -> float:
+	match _reconnect_attempts:
+		0:
+			return 0.5
+		1:
+			return 1.5
+		2:
+			return 3.0
+		_:
+			return 8.0
+
+func _attempt_reconnect() -> void:
+	var session := get_node_or_null("/root/SessionManager")
+	if session == null or session.reconnect_token.is_empty() or local_player_id.is_empty() or match_id.is_empty():
+		return
+	_reconnect_request_pending = true
+	set_connection_state("reconnecting")
+	var backend := get_node_or_null("/root/BackendClient")
+	if backend == null:
+		_reconnect_request_pending = false
+		set_connection_state("disconnected")
+		return
+	var result: Dictionary = backend.authorize_reconnect(match_id, local_player_id, session.reconnect_token)
+	if not bool(result.get("ok", false)):
+		_reconnect_request_pending = false
+		_reconnect_attempts += 1
+		set_connection_state("disconnected")
+		network_error.emit(str(result.get("code", "RECONNECT_FAILED")))
 
 func _new_id(prefix: String) -> String:
 	return "%s-%d" % [prefix, Time.get_ticks_usec()]

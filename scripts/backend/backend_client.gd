@@ -6,6 +6,8 @@ signal lobby_resolved(data: Dictionary)
 signal heartbeat_succeeded(data: Dictionary)
 signal lobby_closed(data: Dictionary)
 signal lobby_started(data: Dictionary)
+signal reconnect_credential_received(data: Dictionary)
+signal reconnect_authorized(data: Dictionary)
 signal turn_credentials_received(data: Dictionary)
 signal backend_request_failed(operation: String, code: String)
 signal signaling_connected
@@ -84,6 +86,32 @@ func mark_lobby_started() -> Dictionary:
 		return {"ok": false, "code": "NOT_HOST_SESSION"}
 	return _request("started_lobby", "/%s/lobbies/%s/started" % [API_VERSION, current_lobby_id], {}, host_session_token)
 
+func request_reconnect_credential(player_id: String) -> Dictionary:
+	if current_lobby_id.is_empty() or host_session_token.is_empty() or player_id.is_empty():
+		return {"ok": false, "code": "NOT_HOST_SESSION"}
+	return _request(
+		"reconnect_credential",
+		"/%s/lobbies/%s/reconnect-credentials" % [API_VERSION, current_lobby_id],
+		{"player_id": player_id},
+		host_session_token,
+	)
+
+func authorize_reconnect(match_id: String, player_id: String, reconnect_token: String) -> Dictionary:
+	if match_id.is_empty() or player_id.is_empty() or reconnect_token.is_empty():
+		return {"ok": false, "code": "RECONNECT_TOKEN_INVALID"}
+	return _request(
+		"authorize_reconnect",
+		"/%s/matches/reconnect" % API_VERSION,
+		{
+			"match_id": match_id,
+			"player_id": player_id,
+			"reconnect_token": reconnect_token,
+			"protocol_version": App.PROTOCOL_VERSION,
+			"game_version": App.GAME_VERSION,
+		},
+		"",
+	)
+
 func request_turn_credentials() -> Dictionary:
 	if current_lobby_id.is_empty() or host_session_token.is_empty():
 		return {"ok": false, "code": "NOT_HOST_SESSION"}
@@ -94,6 +122,9 @@ func connect_signaling_as_host(lobby_id: String, token: String, signaling_url: S
 
 func connect_signaling_as_joiner(lobby_id: String, token: String, signaling_url: String) -> Dictionary:
 	return _connect_signaling(lobby_id, token, signaling_url, false)
+
+func connect_signaling_as_reconnect(lobby_id: String, ticket: String, signaling_url: String, player_id: String, generation: int) -> Dictionary:
+	return _connect_signaling(lobby_id, ticket, signaling_url, false, true, player_id, generation)
 
 func send_signaling_message(message: Dictionary) -> bool:
 	if _signaling_socket == null or _signaling_socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
@@ -114,15 +145,26 @@ func clear_session() -> void:
 	current_signaling_url = ""
 	current_ice_servers.clear()
 
-func _connect_signaling(lobby_id: String, token: String, signaling_url: String, is_host: bool) -> Dictionary:
+func _connect_signaling(
+	lobby_id: String,
+	token: String,
+	signaling_url: String,
+	is_host: bool,
+	is_reconnect: bool = false,
+	player_id: String = "",
+	generation: int = 0,
+) -> Dictionary:
 	disconnect_signaling()
 	_signaling_socket = WebSocketPeer.new()
 	_signaling_auth_sent = false
 	_signaling_auth_message = {
-		"type": "AUTH_HOST" if is_host else "AUTH_JOIN",
+		"type": "AUTH_HOST" if is_host else "AUTH_RECONNECT" if is_reconnect else "AUTH_JOIN",
 		"lobby_id": lobby_id,
 		"host_session_token": token if is_host else null,
-		"join_token": token if not is_host else null,
+		"join_token": token if not is_host and not is_reconnect else null,
+		"reconnect_ticket": token if is_reconnect else null,
+		"player_id": player_id if is_reconnect else null,
+		"connection_generation": generation if is_reconnect else null,
 		"protocol_version": App.PROTOCOL_VERSION,
 		"game_version": App.GAME_VERSION,
 	}
@@ -182,6 +224,14 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 		lobby_closed.emit(data)
 	elif operation == "started_lobby":
 		lobby_started.emit(data)
+	elif operation == "reconnect_credential":
+		reconnect_credential_received.emit(data)
+	elif operation == "authorize_reconnect":
+		current_lobby_id = str(data.get("match_id", current_lobby_id))
+		current_signaling_url = str(data.get("signaling_url", current_signaling_url))
+		var reconnect_servers: Variant = data.get("ice_servers", [])
+		current_ice_servers = reconnect_servers.duplicate(true) if reconnect_servers is Array else []
+		reconnect_authorized.emit(data)
 	elif operation == "turn_credentials":
 		var turn_servers: Variant = data.get("ice_servers", [])
 		if turn_servers is Array:

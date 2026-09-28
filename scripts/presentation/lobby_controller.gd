@@ -108,7 +108,7 @@ func _refresh(lobby: LobbyState) -> void:
 	for player_id: String in _sorted_player_ids(lobby.players):
 		var player := lobby.get_player(player_id)
 		var row := Label.new()
-		row.text = "%s  [%s]%s%s" % [player.name, player.player_id, "  HOST" if player.is_host else "", "  BEREIT" if player.is_ready else "  wartet"]
+		row.text = "%s  [%s]%s%s  | Verbindung: %s" % [player.name, player.player_id, "  HOST" if player.is_host else "", "  BEREIT" if player.is_ready else "  wartet", player.connection_state]
 		players_list.add_child(row)
 	rules_label.text = "Karten: %s\nKontinentboni: %s\nProtokoll: %d\nSpielversion: %s" % ["AN" if lobby.ruleset.territory_cards_enabled else "AUS", "AN" if lobby.ruleset.continent_bonus_enabled else "AUS", lobby.protocol_version, lobby.game_version]
 	cards_check.button_pressed = lobby.ruleset.territory_cards_enabled

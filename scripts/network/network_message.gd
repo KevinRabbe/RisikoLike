@@ -16,6 +16,7 @@ const MATCH_STARTED := "MATCH_STARTED"
 const PEER_LEFT := "PEER_LEFT"
 const ERROR := "ERROR"
 const RULESET_REQUEST := "RULESET_REQUEST"
+const RECONNECT_CREDENTIAL := "RECONNECT_CREDENTIAL"
 
 static var _known_types: Dictionary = {
 	JOIN_REQUEST: true,
@@ -33,6 +34,7 @@ static var _known_types: Dictionary = {
 	PEER_LEFT: true,
 	ERROR: true,
 	RULESET_REQUEST: true,
+	RECONNECT_CREDENTIAL: true,
 }
 
 var message_type: String
