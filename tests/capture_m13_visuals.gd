@@ -62,6 +62,8 @@ func _capture_game_states() -> void:
 	game_state.get_player("P1").spectator_source_status = PlayerState.Status.SURRENDERED
 	controller._refresh_ui()
 	await _capture("spectator.png")
+	game_state.get_player("P1").spectator_mode = false
+	game_state.get_player("P1").spectator_source_status = PlayerState.Status.ACTIVE
 	game_state.status = GameState.MatchStatus.FINISHED
 	game_state.winner_player_id = "P1"
 	controller._refresh_ui()

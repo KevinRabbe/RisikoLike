@@ -470,11 +470,13 @@ func _refresh_ui() -> void:
 	spectator_button.visible = local_player != null and not local_player.is_spectating() and local_player.status in [PlayerState.Status.SURRENDERED, PlayerState.Status.ELIMINATED, PlayerState.Status.LEFT] and game_state.ruleset.spectating_allowed
 	if game_state.status == GameState.MatchStatus.FINISHED:
 		var winner := game_state.get_player(game_state.winner_player_id)
+		result_label.text = ""
 		status_label.text = "Partie beendet — Sieg: %s" % (winner.name if winner != null else game_state.winner_player_id)
 		if connection_overlay != null:
 			connection_overlay.visible = false
 		_show_result_overlay("MATCH COMPLETE\nSieg: %s" % (winner.name if winner != null else game_state.winner_player_id))
 	elif game_state.status == GameState.MatchStatus.TERMINATED:
+		result_label.text = ""
 		status_label.text = "Partie beendet: Host nicht verfügbar."
 		if connection_overlay != null:
 			connection_overlay.visible = false
@@ -484,6 +486,7 @@ func _refresh_ui() -> void:
 		if connection_overlay != null:
 			connection_overlay.visible = true
 	elif visible_player != null and visible_player.is_spectating():
+		result_label.text = ""
 		status_label.text = "Zuschauermodus — öffentliche Partieansicht, keine Spielaktionen."
 	else:
 		status_label.text = ""
