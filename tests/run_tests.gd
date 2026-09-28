@@ -13,6 +13,7 @@ func _init() -> void:
 
 func _run_all() -> void:
 	_test_map_validator()
+	_test_map_visual_validator()
 	_test_ruleset_validator()
 	_test_reinforcement_and_commands()
 	_test_turn_transitions()
@@ -36,6 +37,24 @@ func _test_map_validator() -> void:
 	_expect_equal(symbol_counts["infantry"], 14, "infantry count")
 	_expect_equal(symbol_counts["cavalry"], 14, "cavalry count")
 	_expect_equal(symbol_counts["artillery"], 14, "artillery count")
+
+func _test_map_visual_validator() -> void:
+	var map_data := MapDataFactory.create_default()
+	var visuals := MapVisualDefinition.create_default()
+	var errors := MapVisualValidator.validate(map_data, visuals)
+	_expect(errors.is_empty(), "production map visual definitions validate")
+	_expect_equal(visuals.size(), 42, "production map has 42 visual definitions")
+	for territory_id: String in map_data.territories:
+		var visual := visuals.get(territory_id) as TerritoryVisualDefinition
+		_expect(visual != null, "visual exists for %s" % territory_id)
+		if visual != null:
+			_expect(visual.polygon.size() >= 3, "polygon has enough points for %s" % territory_id)
+			_expect(visual.marker_position != Vector2.ZERO, "marker anchor exists for %s" % territory_id)
+			_expect(visual.label_position != Vector2.ZERO, "label anchor exists for %s" % territory_id)
+	var alaska := visuals.get("NA_01") as TerritoryVisualDefinition
+	var kamchatka := visuals.get("AS_11") as TerritoryVisualDefinition
+	_expect(alaska != null and kamchatka != null, "Alaska and Kamtschatka visuals exist")
+	_expect(kamchatka != null and kamchatka.connection_anchors.size() == 2, "wrapped Alaska/Kamtschatka anchors exist")
 
 func _test_ruleset_validator() -> void:
 	var ruleset := Ruleset.new()
