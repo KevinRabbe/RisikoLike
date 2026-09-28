@@ -11,6 +11,7 @@ var hovered_territory_id := ""
 var selected_territory_id := ""
 var zoom_level := 0.82
 var pan_offset := Vector2.ZERO
+var auto_fit_pending := true
 var _dragging := false
 var _drag_start := Vector2.ZERO
 var _drag_origin := Vector2.ZERO
@@ -32,6 +33,7 @@ func configure(p_map_data: MapData, p_game_state: GameState) -> void:
 	add_child(map_surface)
 	grid = map_surface
 	pan_offset = Vector2.ZERO
+	auto_fit_pending = true
 	call_deferred("_layout_surface")
 	refresh()
 
@@ -58,8 +60,9 @@ func zoom_out() -> void:
 	_zoom_at(zoom_level - 0.1, size * 0.5)
 
 func reset_view() -> void:
-	zoom_level = 0.82
+	zoom_level = _default_zoom()
 	pan_offset = Vector2.ZERO
+	auto_fit_pending = false
 	_layout_surface()
 
 func _gui_input(event: InputEvent) -> void:
@@ -133,6 +136,7 @@ func _zoom_at(next_zoom: float, focus_position: Vector2) -> void:
 		return
 	var focus_world := _world_position(focus_position)
 	zoom_level = clamped
+	auto_fit_pending = false
 	_layout_surface()
 	var focus_after := map_surface.position + focus_world * zoom_level
 	pan_offset += focus_position - focus_after
@@ -141,12 +145,23 @@ func _zoom_at(next_zoom: float, focus_position: Vector2) -> void:
 func _layout_surface() -> void:
 	if map_surface == null:
 		return
+	if auto_fit_pending:
+		zoom_level = _default_zoom()
+		auto_fit_pending = false
 	map_surface.scale = Vector2.ONE * zoom_level
 	map_surface.position = (size - MapVisualDefinition.MAP_SIZE * zoom_level) * 0.5 + pan_offset
 	map_surface.set_render_zoom(zoom_level)
 
 func _on_resized() -> void:
+	if not _dragging and map_surface != null and pan_offset == Vector2.ZERO:
+		auto_fit_pending = true
 	_layout_surface()
+
+func _default_zoom() -> float:
+	if size.x <= 1.0 or size.y <= 1.0:
+		return 0.82
+	var fit := minf(size.x / MapVisualDefinition.MAP_SIZE.x, size.y / MapVisualDefinition.MAP_SIZE.y)
+	return clampf(fit * 0.96, 0.52, 1.35)
 
 func _tooltip_for(territory_id: String) -> String:
 	if territory_id.is_empty() or map_data == null or game_state == null:

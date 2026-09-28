@@ -26,6 +26,11 @@ var local_player_id := ""
 var pending_network_action := false
 var surrender_dialog: ConfirmationDialog
 var spectator_button: Button
+var result_overlay: PanelContainer
+var result_overlay_label: Label
+var connection_overlay: PanelContainer
+var connection_overlay_label: Label
+var card_summary_label: Label
 
 func _process(_delta: float) -> void:
 	if game_state != null and timer_label != null:
@@ -51,43 +56,61 @@ func _ready() -> void:
 	_refresh_ui()
 
 func _build_ui() -> void:
-	var root := VBoxContainer.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 8)
-	add_child(root)
+	AtlasFrontTheme.install(self)
+	AtlasFrontTheme.add_backdrop(self)
+	var top_bar_panel := PanelContainer.new()
+	top_bar_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	top_bar_panel.offset_left = 20
+	top_bar_panel.offset_top = 16
+	top_bar_panel.offset_right = -20
+	top_bar_panel.offset_bottom = 86
+	add_child(top_bar_panel)
 	var top_bar := HBoxContainer.new()
-	root.add_child(top_bar)
+	top_bar.add_theme_constant_override("separation", 18)
+	top_bar_panel.add_child(top_bar)
+	var brand := AtlasFrontTheme.title_label("ATLAS // FRONT", 22)
+	brand.add_theme_color_override("font_color", AtlasFrontTheme.CYAN_SOFT)
+	top_bar.add_child(brand)
 	phase_label = Label.new()
 	phase_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	phase_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	top_bar.add_child(phase_label)
 	timer_label = Label.new()
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	timer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	timer_label.add_theme_color_override("font_color", AtlasFrontTheme.WARNING)
 	top_bar.add_child(timer_label)
 	player_label = Label.new()
+	player_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	top_bar.add_child(player_label)
-	status_label = Label.new()
-	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	root.add_child(status_label)
-	var content := HBoxContainer.new()
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(content)
+	var content := Control.new()
+	content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	content.offset_left = 20
+	content.offset_top = 100
+	content.offset_right = -20
+	content.offset_bottom = -212
+	add_child(content)
 	map_controller = MapController.new()
-	map_controller.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	map_controller.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	map_controller.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	map_controller.territory_selected.connect(_on_territory_selected)
 	content.add_child(map_controller)
 	var side_panel := PanelContainer.new()
-	side_panel.custom_minimum_size = Vector2(340, 0)
-	content.add_child(side_panel)
+	side_panel.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
+	side_panel.offset_left = -326
+	side_panel.offset_right = -6
+	side_panel.offset_top = 12
+	side_panel.offset_bottom = -212
+	add_child(side_panel)
 	var side := VBoxContainer.new()
-	side.add_theme_constant_override("separation", 8)
+	side.add_theme_constant_override("separation", 9)
 	side_panel.add_child(side)
 	var title := Label.new()
-	title.text = "Lokale Partie"
+	title.text = "TACTICAL OVERVIEW"
 	title.add_theme_font_size_override("font_size", 24)
+	title.add_theme_color_override("font_color", AtlasFrontTheme.CYAN_SOFT)
 	side.add_child(title)
 	var players_title := Label.new()
-	players_title.text = "Spielerübersicht"
+	players_title.text = "PLAYERS // STATUS"
 	players_title.add_theme_font_size_override("font_size", 18)
 	side.add_child(players_title)
 	player_panel = VBoxContainer.new()
@@ -97,6 +120,13 @@ func _build_ui() -> void:
 	selection_label = Label.new()
 	selection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	side.add_child(selection_label)
+	card_summary_label = Label.new()
+	card_summary_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	card_summary_label.add_theme_color_override("font_color", AtlasFrontTheme.TEXT_MUTED)
+	side.add_child(card_summary_label)
+	side.add_child(HSeparator.new())
+	var combat_title := AtlasFrontTheme.section_label("COMBAT // PARAMETERS")
+	side.add_child(combat_title)
 	amount_spin = SpinBox.new()
 	amount_spin.min_value = 1
 	amount_spin.max_value = 100
@@ -114,30 +144,44 @@ func _build_ui() -> void:
 	defender_dice_spin.value = 2
 	defender_dice_spin.prefix = "Verteidigungswürfel: "
 	side.add_child(defender_dice_spin)
+	var action_bar_panel := PanelContainer.new()
+	action_bar_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	action_bar_panel.offset_left = 20
+	action_bar_panel.offset_top = -202
+	action_bar_panel.offset_right = -20
+	action_bar_panel.offset_bottom = -18
+	add_child(action_bar_panel)
+	var action_bar := VBoxContainer.new()
+	action_bar.add_theme_constant_override("separation", 7)
+	action_bar_panel.add_child(action_bar)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override("separation", 8)
+	action_bar.add_child(actions)
 	primary_action = Button.new()
 	primary_action.text = "Aktion bestätigen"
+	primary_action.custom_minimum_size = Vector2(190, 42)
 	primary_action.pressed.connect(_on_primary_action_pressed)
-	side.add_child(primary_action)
+	actions.add_child(primary_action)
 	trade_button = Button.new()
-	trade_button.text = "Erstes gültiges Kartenset tauschen"
+	trade_button.text = "Kartenset tauschen"
 	trade_button.pressed.connect(_on_trade_pressed)
-	side.add_child(trade_button)
+	actions.add_child(trade_button)
 	reset_button = Button.new()
 	reset_button.text = "Verstärkungen zurücksetzen"
 	reset_button.pressed.connect(_on_reset_pressed)
-	side.add_child(reset_button)
+	actions.add_child(reset_button)
 	end_phase_button = Button.new()
 	end_phase_button.text = "Phase beenden"
 	end_phase_button.pressed.connect(_on_end_phase_pressed)
-	side.add_child(end_phase_button)
+	actions.add_child(end_phase_button)
 	end_turn_button = Button.new()
 	end_turn_button.text = "Zug beenden"
 	end_turn_button.pressed.connect(_on_end_turn_pressed)
-	side.add_child(end_turn_button)
+	actions.add_child(end_turn_button)
 	var surrender_button := Button.new()
 	surrender_button.text = "Aufgeben"
 	surrender_button.pressed.connect(_on_surrender_pressed)
-	side.add_child(surrender_button)
+	actions.add_child(surrender_button)
 	surrender_dialog = ConfirmationDialog.new()
 	surrender_dialog.title = "Partie aufgeben"
 	surrender_dialog.dialog_text = "Möchtest du die Partie wirklich aufgeben?"
@@ -148,10 +192,15 @@ func _build_ui() -> void:
 	spectator_button = Button.new()
 	spectator_button.text = "Zuschauen"
 	spectator_button.pressed.connect(_on_spectator_pressed)
-	side.add_child(spectator_button)
+	actions.add_child(spectator_button)
 	result_label = Label.new()
 	result_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	side.add_child(result_label)
+	result_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	action_bar.add_child(result_label)
+	status_label = Label.new()
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	status_label.add_theme_color_override("font_color", AtlasFrontTheme.CYAN_SOFT)
+	action_bar.add_child(status_label)
 	var zoom_row := HBoxContainer.new()
 	var zoom_out_button := Button.new()
 	zoom_out_button.text = "Karte −"
@@ -165,11 +214,51 @@ func _build_ui() -> void:
 	zoom_in_button.text = "Karte +"
 	zoom_in_button.pressed.connect(_on_zoom_in_pressed)
 	zoom_row.add_child(zoom_in_button)
-	side.add_child(zoom_row)
+	action_bar.add_child(zoom_row)
 	var hint := Label.new()
 	hint.text = "Gebiet anklicken: Verstärken = Gebiet, Angriff/Fortification = Quelle dann Ziel."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	side.add_child(hint)
+	hint.add_theme_color_override("font_color", AtlasFrontTheme.TEXT_MUTED)
+	action_bar.add_child(hint)
+	_build_lifecycle_overlays()
+
+func _build_lifecycle_overlays() -> void:
+	connection_overlay = PanelContainer.new()
+	connection_overlay.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	connection_overlay.offset_left = -250
+	connection_overlay.offset_top = 104
+	connection_overlay.offset_right = 250
+	connection_overlay.offset_bottom = 184
+	connection_overlay.visible = false
+	add_child(connection_overlay)
+	connection_overlay_label = Label.new()
+	connection_overlay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	connection_overlay_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	connection_overlay_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	connection_overlay.add_child(connection_overlay_label)
+	result_overlay = PanelContainer.new()
+	result_overlay.set_anchors_preset(Control.PRESET_CENTER)
+	result_overlay.offset_left = -250
+	result_overlay.offset_top = -110
+	result_overlay.offset_right = 250
+	result_overlay.offset_bottom = 110
+	result_overlay.visible = false
+	add_child(result_overlay)
+	var result_box := VBoxContainer.new()
+	result_box.add_theme_constant_override("separation", 12)
+	result_overlay.add_child(result_box)
+	result_overlay_label = Label.new()
+	result_overlay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result_overlay_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	result_box.add_child(result_overlay_label)
+	var return_button := Button.new()
+	return_button.text = "Zum Hauptmenü"
+	return_button.pressed.connect(_on_return_to_menu_pressed)
+	result_box.add_child(return_button)
+
+func _on_return_to_menu_pressed() -> void:
+	NetworkManager.shutdown()
+	SceneRouter.go_to_main_menu()
 
 func _on_territory_selected(territory_id: String) -> void:
 	if not _can_local_player_act():
@@ -312,6 +401,10 @@ func _on_network_connection_changed(state: String) -> void:
 			result_label.text = "Wiederverbinden fehlgeschlagen: Partie verlassen oder Fenster abgelaufen."
 		"in_game":
 			result_label.text = "Wieder verbunden. Autoritativer Spielstand synchronisiert."
+	if connection_overlay != null:
+		connection_overlay.visible = state in ["disconnected", "reconnecting", "failed"]
+		if connection_overlay.visible:
+			connection_overlay_label.text = "VERBINDUNG UNTERBROCHEN\n" + ("Wiederverbinden läuft …" if state != "failed" else "Reconnect-Fenster abgelaufen")
 	_refresh_ui()
 
 func _refresh_ui() -> void:
@@ -332,13 +425,15 @@ func _refresh_ui() -> void:
 	phase_label.text = "Phase: %s | Runde %d | Revision %d" % [game_state.turn_state.phase_name(), game_state.turn_state.round_number, game_state.state_revision]
 	player_label.text = "Am Zug: %s%s" % [active_player.name, " | Du: %s" % visible_player.name if network_mode and visible_player != null else ""]
 	reinforcement_label.text = "Eigene Verstärkungen: %d | Eigene Karten: %d" % [visible_player.reinforcements_remaining if visible_player != null else 0, visible_player.territory_card_ids.size() if visible_player != null else 0]
+	card_summary_label.text = _card_summary(visible_player)
 	for child in player_panel.get_children():
 		child.queue_free()
 	for player_id: String in game_state.players:
 		var listed_player := game_state.get_player(player_id)
 		var player_row := Label.new()
 		var card_count := listed_player.territory_card_ids.size() if not network_mode or player_id == local_player_id else listed_player.visible_card_count
-		player_row.text = "%s  | %s | Gebiete: %d  | Karten: %d%s" % [listed_player.name, _player_status_text(listed_player), listed_player.territory_count(game_state), card_count, "  ← am Zug" if player_id == game_state.turn_state.active_player_id else ""]
+		player_row.text = "%s  ·  %s\nGebiete %d  ·  Karten %d%s" % [listed_player.name, _player_status_text(listed_player), listed_player.territory_count(game_state), card_count, "  ·  AM ZUG" if player_id == game_state.turn_state.active_player_id else ""]
+		player_row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		player_panel.add_child(player_row)
 	selection_label.text = "Auswahl: %s -> %s" % [source_id if not source_id.is_empty() else "—", target_id if not target_id.is_empty() else "—"]
 	var reinforcement_phase := game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT
@@ -352,6 +447,12 @@ func _refresh_ui() -> void:
 		end_phase_button.disabled = pending_network_action
 		end_turn_button.disabled = pending_network_action
 	primary_action.visible = can_act and (game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT or game_state.turn_state.phase == TurnState.Phase.ATTACK or game_state.turn_state.phase == TurnState.Phase.FORTIFICATION)
+	if game_state.turn_state.phase == TurnState.Phase.REINFORCEMENT:
+		primary_action.text = "Verstärkung platzieren"
+	elif game_state.turn_state.phase == TurnState.Phase.ATTACK:
+		primary_action.text = "Eroberung fortsetzen" if not game_state.pending_conquest.is_empty() else "Angriff ausführen"
+	elif game_state.turn_state.phase == TurnState.Phase.FORTIFICATION:
+		primary_action.text = "Truppen bewegen"
 	end_phase_button.visible = can_act and game_state.turn_state.phase != TurnState.Phase.TURN_END and game_state.status == GameState.MatchStatus.PLAYING
 	end_phase_button.text = "Verstärkungen bestätigen" if reinforcement_phase else "Phase beenden"
 	end_turn_button.visible = can_act and game_state.turn_state.phase == TurnState.Phase.TURN_END
@@ -360,15 +461,42 @@ func _refresh_ui() -> void:
 	if game_state.status == GameState.MatchStatus.FINISHED:
 		var winner := game_state.get_player(game_state.winner_player_id)
 		status_label.text = "Partie beendet — Sieg: %s" % (winner.name if winner != null else game_state.winner_player_id)
+		if connection_overlay != null:
+			connection_overlay.visible = false
+		_show_result_overlay("MATCH COMPLETE\nSieg: %s" % (winner.name if winner != null else game_state.winner_player_id))
 	elif game_state.status == GameState.MatchStatus.TERMINATED:
 		status_label.text = "Partie beendet: Host nicht verfügbar."
+		if connection_overlay != null:
+			connection_overlay.visible = false
+		_show_result_overlay("MATCH TERMINATED\nHost nicht verfügbar")
 	elif network_mode and NetworkManager.connection_state in ["disconnected", "reconnecting", "failed"]:
 		status_label.text = "Verbindung unterbrochen — Timer läuft weiter; Wiederverbinden wird versucht."
+		if connection_overlay != null:
+			connection_overlay.visible = true
 	elif visible_player != null and visible_player.is_spectating():
 		status_label.text = "Zuschauermodus — öffentliche Partieansicht, keine Spielaktionen."
 	else:
 		status_label.text = ""
 	_refresh_timer()
+
+func _show_result_overlay(message: String) -> void:
+	if result_overlay == null:
+		return
+	result_overlay.visible = true
+	result_overlay_label.text = message
+
+func _card_summary(player: PlayerState) -> String:
+	if player == null:
+		return "KARTENHAND\nKeine sichtbare Hand"
+	if network_mode and player.player_id != local_player_id:
+		return "KARTENHAND\nGegnerische Karten verborgen"
+	if player.territory_card_ids.is_empty():
+		return "KARTENHAND\nKeine Karten"
+	var names: Array[String] = []
+	for card_id in player.territory_card_ids:
+		var territory := game_state.map_data.get_territory(card_id)
+		names.append(territory.name_de if territory != null else str(card_id))
+	return "KARTENHAND  //  %d\n%s" % [names.size(), ", ".join(names)]
 
 func _find_valid_card_set(card_ids: Array[String]) -> Array[String]:
 	if network_mode:

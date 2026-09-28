@@ -9,6 +9,8 @@ var status_label: Label
 var waiting_for_backend := false
 
 func _ready() -> void:
+	AtlasFrontTheme.install(self)
+	AtlasFrontTheme.add_backdrop(self)
 	_build_ui()
 	NetworkManager.lobby_changed.connect(_on_lobby_changed)
 	NetworkManager.network_error.connect(_on_network_error)
@@ -30,9 +32,12 @@ func _build_ui() -> void:
 	content.add_theme_constant_override("separation", 12)
 	margin.add_child(content)
 	var title := Label.new()
-	title.text = "Lobby beitreten"
+	title.text = "ATLAS // FRONT"
 	title.add_theme_font_size_override("font_size", 30)
 	content.add_child(title)
+	var subtitle := _label("LOBBY BEITRETEN  //  INVITE LINK")
+	subtitle.add_theme_color_override("font_color", AtlasFrontTheme.CYAN_SOFT)
+	content.add_child(subtitle)
 	content.add_child(_label("Invite-Code eingeben; der Host muss keine IP oder Portfreigabe teilen."))
 	content.add_child(_label("Spielername"))
 	player_name_input = LineEdit.new()
@@ -108,6 +113,7 @@ func _on_back_pressed() -> void:
 func _label(value: String) -> Label:
 	var label := Label.new()
 	label.text = value
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	return label
 
 func _on_debug_toggled(enabled: bool) -> void:

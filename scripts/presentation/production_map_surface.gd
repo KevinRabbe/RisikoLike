@@ -6,8 +6,8 @@ const OCEAN := Color("#07111d")
 const GRID := Color(0.15, 0.28, 0.38, 0.18)
 const LAND_BASE := Color("#1b3444")
 const LAND_EDGE := Color("#79a6b8")
-const REGION_TEXT := Color(0.54, 0.75, 0.83, 0.42)
-const TEXT := Color("#d9edf2")
+const REGION_TEXT := Color(0.62, 0.84, 0.88, 0.64)
+const TEXT := Color("#e9fbff")
 const NEON := Color("#5be7e5")
 const INVALID := Color("#ff7185")
 
@@ -72,7 +72,8 @@ func _draw_region_labels() -> void:
 		if region == null:
 			continue
 		var position: Vector2 = positions[region_id]
-		draw_string(font, position, region.name_de.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 15, REGION_TEXT)
+		draw_string(font, position + Vector2(1, 2), region.name_de.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, Color(0, 0, 0, 0.55))
+		draw_string(font, position, region.name_de.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 17, REGION_TEXT)
 
 func _draw_water_connections() -> void:
 	if map_data == null:
@@ -151,10 +152,14 @@ func _draw_territory(territory_id: String, visual: TerritoryVisualDefinition) ->
 	draw_polyline(closed, border, border_width, true)
 	if interaction in ["selected", "source", "valid", "target"]:
 		draw_polyline(closed, Color(border, 0.18), border_width * 3.0, true)
-	if render_zoom >= 0.78:
+	if render_zoom >= 0.72 or interaction in ["hover", "selected", "source", "target", "valid"]:
 		var font := ThemeDB.fallback_font
-		var label_size := 13 if render_zoom < 1.0 else 15
-		draw_string(font, visual.label_position, _short_name(territory_id), HORIZONTAL_ALIGNMENT_CENTER, 100, label_size, TEXT)
+		var label_size := 14 if render_zoom < 1.0 else 16
+		if interaction in ["hover", "selected", "source", "target"]:
+			label_size += 2
+		var label := _short_name(territory_id)
+		draw_string(font, visual.label_position + Vector2(1, 2), label, HORIZONTAL_ALIGNMENT_CENTER, 120, label_size, Color(0, 0, 0, 0.72))
+		draw_string(font, visual.label_position, label, HORIZONTAL_ALIGNMENT_CENTER, 120, label_size, TEXT)
 	_draw_army_marker(visual.marker_position, state.army_count if state != null else 0, owner_color, interaction)
 
 func _draw_army_marker(position: Vector2, count: int, owner_color: Color, interaction: String) -> void:
@@ -166,7 +171,8 @@ func _draw_army_marker(position: Vector2, count: int, owner_color: Color, intera
 	draw_circle(position, radius, marker_color)
 	draw_arc(position, radius, 0.0, TAU, 24, Color(owner_color, 0.95), 2.0, true)
 	var font := ThemeDB.fallback_font
-	draw_string(font, position + Vector2(-22, 6), str(count), HORIZONTAL_ALIGNMENT_CENTER, 44, 16, TEXT)
+	draw_string(font, position + Vector2(-22, 7), str(count), HORIZONTAL_ALIGNMENT_CENTER, 44, 17, Color(0, 0, 0, 0.75))
+	draw_string(font, position + Vector2(-22, 5), str(count), HORIZONTAL_ALIGNMENT_CENTER, 44, 17, TEXT)
 
 func _ownership_fill(color: Color) -> Color:
 	return Color(0.08 + color.r * 0.42, 0.12 + color.g * 0.42, 0.16 + color.b * 0.42, 1.0)

@@ -12,6 +12,8 @@ var continents_check: CheckButton
 var copy_button: Button
 
 func _ready() -> void:
+	AtlasFrontTheme.install(self)
+	AtlasFrontTheme.add_backdrop(self)
 	_build_ui()
 	NetworkManager.lobby_changed.connect(_on_lobby_changed)
 	NetworkManager.network_error.connect(_on_network_error)
@@ -31,11 +33,13 @@ func _build_ui() -> void:
 	margin.add_child(root)
 	title_label = Label.new()
 	title_label.add_theme_font_size_override("font_size", 30)
+	title_label.add_theme_color_override("font_color", AtlasFrontTheme.CYAN_SOFT)
 	root.add_child(title_label)
 	invite_label = Label.new()
 	root.add_child(invite_label)
 	copy_button = Button.new()
 	copy_button.text = "Invite-Code kopieren"
+	copy_button.custom_minimum_size = Vector2(0, 44)
 	copy_button.pressed.connect(_on_copy_invite_pressed)
 	root.add_child(copy_button)
 	var content := HBoxContainer.new()
@@ -48,7 +52,7 @@ func _build_ui() -> void:
 	players_box.add_theme_constant_override("separation", 8)
 	players_panel.add_child(players_box)
 	var players_title := Label.new()
-	players_title.text = "Spieler"
+	players_title.text = "PLAYERS // CONNECTION"
 	players_title.add_theme_font_size_override("font_size", 22)
 	players_box.add_child(players_title)
 	players_list = VBoxContainer.new()
@@ -60,7 +64,7 @@ func _build_ui() -> void:
 	rules_box.add_theme_constant_override("separation", 8)
 	rules_panel.add_child(rules_box)
 	var rules_title := Label.new()
-	rules_title.text = "Ruleset"
+	rules_title.text = "RULESET // MATCH CONFIG"
 	rules_title.add_theme_font_size_override("font_size", 22)
 	rules_box.add_child(rules_title)
 	rules_label = Label.new()

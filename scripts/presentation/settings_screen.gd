@@ -8,6 +8,8 @@ extends Control
 @onready var status_label: Label = %StatusLabel
 
 func _ready() -> void:
+	AtlasFrontTheme.install(self)
+	AtlasFrontTheme.add_backdrop(self)
 	player_name_input.text = SettingsManager.player_name
 	language_select.select(0 if SettingsManager.language == "de" else 1)
 	master_slider.value = SettingsManager.master_volume * 100.0
