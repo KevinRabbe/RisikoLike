@@ -6,6 +6,8 @@ func _ready() -> void:
 	AtlasFrontTheme.install(self)
 	AtlasFrontTheme.add_backdrop(self)
 	_build_ui()
+	AudioManager.attach_feedback(self)
+	AudioManager.start_music()
 
 func _build_ui() -> void:
 	var frame := MarginContainer.new()

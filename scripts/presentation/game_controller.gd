@@ -24,6 +24,7 @@ var target_id := ""
 var network_mode := false
 var local_player_id := ""
 var pending_network_action := false
+var pending_command_type := ""
 var surrender_dialog: ConfirmationDialog
 var spectator_button: Button
 var result_overlay: PanelContainer
@@ -53,6 +54,8 @@ func _ready() -> void:
 		game_state = GameState.create_local(clampi(player_count, 2, 5), 424242)
 		processor = CommandProcessor.new(game_state, RandomSource.new(424242))
 	_build_ui()
+	AudioManager.attach_feedback(self)
+	AudioManager.start_music()
 	_refresh_ui()
 
 func _build_ui() -> void:
@@ -261,6 +264,7 @@ func _on_return_to_menu_pressed() -> void:
 	SceneRouter.go_to_main_menu()
 
 func _on_territory_selected(territory_id: String) -> void:
+	AudioManager.play_event("territory_select")
 	if not _can_local_player_act():
 		return
 	if network_mode and game_state.turn_state.active_player_id != local_player_id:
@@ -366,11 +370,13 @@ func _execute(command: CommandEnvelope) -> void:
 			result_label.text = "Abgelehnt: %s" % queued.get("code", "NETWORK_ERROR")
 		else:
 			pending_network_action = true
+			pending_command_type = command.command_type
 		_refresh_ui()
 		return
 	var result := processor.execute(command)
 	if result.accepted:
 		result_label.text = "OK: %s" % result.data.get("code", "OK")
+		_play_command_feedback(command.command_type, result.data)
 		source_id = ""
 		target_id = ""
 	else:
@@ -381,10 +387,13 @@ func _on_network_command_result(result: CommandResult) -> void:
 	pending_network_action = false
 	if result.accepted:
 		result_label.text = "Host bestätigt: %s" % _format_command_result(result)
+		_play_command_feedback(pending_command_type, result.data)
 		source_id = ""
 		target_id = ""
 	else:
 		result_label.text = "Host lehnt ab: %s" % result.code
+		AudioManager.play_event("error")
+	pending_command_type = ""
 	_refresh_ui()
 
 func _on_network_snapshot_changed(_snapshot: GameStateSnapshot) -> void:
@@ -478,6 +487,17 @@ func _refresh_ui() -> void:
 	else:
 		status_label.text = ""
 	_refresh_timer()
+
+func _play_command_feedback(command_type: String, data: Dictionary) -> void:
+	match command_type:
+		"attack":
+			AudioManager.play_event("dice_roll")
+			if bool(data.get("conquered", false)):
+				AudioManager.play_event("conquest")
+		"trade_cards": AudioManager.play_event("card_trade")
+		"place_reinforcement", "reset_reinforcements": AudioManager.play_event("reinforcement")
+		"surrender": AudioManager.play_event("elimination")
+		"draw_card": AudioManager.play_event("card_draw")
 
 func _show_result_overlay(message: String) -> void:
 	if result_overlay == null:

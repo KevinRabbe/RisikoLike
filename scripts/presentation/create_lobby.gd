@@ -14,6 +14,8 @@ func _ready() -> void:
 	AtlasFrontTheme.install(self)
 	AtlasFrontTheme.add_backdrop(self)
 	_build_ui()
+	AudioManager.attach_feedback(self)
+	AudioManager.start_music()
 	NetworkManager.lobby_changed.connect(_on_lobby_changed)
 	NetworkManager.network_error.connect(_on_network_error)
 
