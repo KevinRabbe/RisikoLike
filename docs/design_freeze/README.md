@@ -38,6 +38,7 @@ The board is the star. The room, HUD, animation and audio support the board; the
 - [09_QA_ACCEPTANCE.md](09_QA_ACCEPTANCE.md) — acceptance gates, fixtures, edge cases, severity policy
 - [10_IMPLEMENTATION_ROADMAP.md](10_IMPLEMENTATION_ROADMAP.md) — R0–R15 execution order and implementation constraints
 - [11_R0_IMPLEMENTATION_INVENTORY.md](11_R0_IMPLEMENTATION_INVENTORY.md) — exact remote-baseline code/asset inventory, KEEP/MODIFY/REPLACE boundaries and pre-R1 reconciliation requirement
+- [12_RECONCILIATION_AND_R1_HANDOFF.md](12_RECONCILIATION_AND_R1_HANDOFF.md) — exact local-history reconciliation procedure and R1 entry condition
 - [DECISION_INDEX.md](DECISION_INDEX.md) — traceability from major D-ranges to the canonical documents
 
 ## Existing source-of-truth files that remain important
