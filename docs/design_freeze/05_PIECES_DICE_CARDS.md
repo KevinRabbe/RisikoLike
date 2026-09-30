@@ -1,6 +1,6 @@
 # ATLAS FRONT — Pieces, Dice and Cards Freeze
 
-Status: **PASS / frozen**
+Status: **PASS / frozen; direct-manipulation dice amendment integrated**
 
 ## 1. Army Piece role
 
@@ -76,6 +76,20 @@ Subtle brighter rim/plate over ~120–150 ms.
 
 Neutral bright ring + stronger accent + territory selection geometry. Minimal elevation is allowed when Reduced Motion is off.
 
+### Attack source
+
+Attack source is stronger than ordinary selected/hover state so the origin of the attack remains unambiguous during target selection and dice presentation.
+
+Allowed treatment:
+
+- stronger mask-based territory outline;
+- controlled glow;
+- stronger piece accent;
+- slight scale/elevation while Reduced Motion is off;
+- optional source→target route once target is armed.
+
+Army count and territory label must remain readable. Source emphasis is presentation-only.
+
 ### Reinforced
 
 Example `8 → +3 → 11`, total ~350–450 ms.
@@ -96,7 +110,11 @@ Dice must feel physically present on the command table while remaining presentat
 
 Authoritative sequence:
 
-`RNG result fixed first → physical roll animation → controlled natural-looking settle → visible comparison`
+`throw release → authoritative RNG/result fixed → gesture mapped to presentation → physical/hybrid roll → controlled natural-looking settle → visible comparison`
+
+Mouse gesture, force, direction and spin never change die-face probabilities or combat outcomes.
+
+Detailed interaction contracts are frozen in `13_DIRECT_MANIPULATION_AND_DICE_INTERACTION.md`.
 
 ## 8. Dice form/material
 
@@ -118,62 +136,141 @@ Role colors are independent of player colors.
 
 Dice collide with:
 
-- board surface;
-- invisible board safety edge;
+- the command-table / board floor;
+- invisible safety walls aligned to the physical/simulated table edge;
 - other dice.
 
 Dice do not collide with:
 
 - army pieces;
-- labels;
+- territory labels;
+- region labels;
+- ownership masks;
+- hover/selected visuals;
 - routes;
 - tooltips;
 - HUD.
 
-## 10. Dice spawn/placement
+This is intentional. Dice may roll visually through the space occupied by pieces without knocking them over or moving them.
 
-Runtime chooses a visible safe roll zone based on:
+## 10. Dice presentation space
 
-1. board viewport visibility;
-2. HUD safe areas;
-3. source/target avoidance;
-4. piece density;
-5. dice-avoidance heatmap;
-6. room for all dice.
+V1 does **not** restrict dice to a small dedicated roll zone.
 
-Attacker and defender groups start slightly separated.
+The whole visible command-table / board surface is the V1 dice presentation space.
 
-## 11. Predetermined settle
+Dice may visibly:
 
-The animation may use real physics for motion but must deliberately settle to the precomputed faces.
+- roll across the world map;
+- cross territory art and ownership tints;
+- pass through the visual footprint of army pieces;
+- pass over labels and routes without affecting them;
+- collide with other dice;
+- bounce from the table edge;
+- continue rolling until natural/controlled settle.
+
+The table safety boundary prevents dice from leaving the simulated space.
+
+Attacker and defender dice may still spawn as separate readable groups before the throw.
+
+## 11. V1 dice throw gesture
+
+Primary throw gesture:
+
+`LMB press/hold on dice group → coarse mouse movement / stirring / sling motion → release`
+
+The gesture is intentionally forgiving and must not require a perfect circle or pixel-accurate path.
+
+Presentation inputs may include:
+
+- recent travel distance;
+- average pointer speed;
+- peak pointer speed;
+- release direction;
+- coarse direction changes / stirring motion.
+
+A nearly stationary release still produces a valid default/minimum-strength throw.
+
+Click/keyboard/default-throw fallback remains available for accessibility.
+
+## 12. Dice force mapping
+
+Gesture intensity affects presentation only.
+
+V1 normalized force range:
+
+**40%–110%**
+
+Guidance:
+
+- ~40%: soft but clearly rolling throw;
+- ~60–80%: ordinary throw;
+- ~100%: strong throw;
+- up to 110%: vigorous throw with longer travel/roll and potentially more table-edge bounces.
+
+Values below the useful range clamp to 40%.
+Values above the useful range clamp to 110%.
+
+110% must never eject dice from the simulated table space.
+
+## 13. Fake-3D / 2.5D dice space
+
+Dice may use true 3D physics or a controlled fake-3D/2.5D implementation.
+
+The visible contract matters more than the technique:
+
+- dice read as occupying the same physical command table as the map;
+- perspective is consistent with the table;
+- table edges behave as believable collision/safety boundaries;
+- stronger throws travel farther and settle later;
+- dice cannot leave the simulation space;
+- predetermined final faces remain visually credible.
+
+Dice do not need physics interaction with pieces, labels or HUD.
+
+## 14. Predetermined settle
+
+The animation may use real or hybrid physics for motion but must deliberately settle to the precomputed faces.
 
 The final correction must not look like teleporting, post-stop rotation or an obvious face swap.
 
 If free physics fails to settle, use a controlled settle before the hard presentation timeout.
 
-## 12. Dice timing
+The gesture never changes the already-authoritative result.
+
+## 15. Dice timing
 
 ### Normal
 
-- spawn: 100–150 ms
-- roll: 600–900 ms
-- settle: 200–350 ms
-- result pause: 350–500 ms
-- total target: ~1.3–1.9 s
+- spawn/grab: ~100–150 ms
+- free/hybrid roll: typically ~600–1400 ms depending on force/collisions
+- settle: ~200–350 ms
+- result pause: ~350–500 ms
+- total normal target: approximately **1.3–2.2 s**
 
 ### Fast
 
-- spawn: ~80 ms
-- roll: 350–500 ms
-- settle: 120–180 ms
-- result pause: 250–300 ms
-- total: ~0.8–1.1 s
+- spawn/grab: ~80 ms
+- roll: ~350–650 ms
+- settle: ~120–180 ms
+- result pause: ~250–300 ms
+- total target: ~0.8–1.2 s
 
 AI 4× does not remove physical dice; visible movement retains an approximate 450–500 ms lower bound.
 
-Hard dice presentation timeout: ~2.5 s.
+Hard dice presentation timeout remains approximately **2.5 s**. A 100–110% throw may roll longer than a soft throw, but must still transition into a controlled natural settle before the hard timeout.
 
-## 13. Dice result presentation
+## 16. Dice selection
+
+Legal dice count is chosen primarily with the mouse wheel while pointer focus is over the attacker/defender dice interaction.
+
+Only rule-legal values can be reached.
+
+The same wheel event must not also zoom the map.
+
+Click/keyboard selector alternatives remain available for accessibility and fallback input.
+
+## 17. Dice result presentation
 
 Physical dice stay where they settled while a clean result interpretation appears.
 
@@ -191,13 +288,35 @@ Unpaired dice dim. Tie rule is explicit.
 
 Result remains readable for at least ~350 ms before a repeat action can proceed.
 
-## 14. Cards role
+## 18. Future dice presentation surfaces — post-V1
+
+V1 uses one primary presentation style:
+
+**free throw across the command table / game board.**
+
+The architecture should not prevent later cosmetic alternatives such as:
+
+- dice cup;
+- game-box/tray throw;
+- automatic presentation surface.
+
+These are explicitly **post-V1** and must not be implemented as part of the first release scope.
+
+Any future surface is presentation-only and must not change:
+
+- RNG;
+- legal dice count;
+- combat probabilities;
+- combat rules;
+- multiplayer authority.
+
+## 19. Cards role
 
 Cards are premium command cards, not fantasy collectible cards.
 
 Portrait ratio approximately 2:3. Normal overlay target around 180×270 px at 1080p, with a useful range of ~170–190 × 255–285.
 
-## 15. Card visual hierarchy
+## 20. Card visual hierarchy
 
 Front hierarchy:
 
@@ -213,7 +332,7 @@ Types:
 - ARTILLERIE
 - JOKER
 
-## 16. Card glyph direction
+## 21. Card glyph direction
 
 - Infantry: geometric ground/shield motif.
 - Cavalry: mobility/double-chevron motif.
@@ -222,19 +341,19 @@ Types:
 
 No requirement for literal soldier/horse/cannon illustrations.
 
-## 17. Joker
+## 22. Joker
 
 Joker contains no territory identity and no region. It uses only Joker/Wildcard presentation.
 
 Two jokers are visually identical but have distinct internal card IDs.
 
-## 18. Card bonus candidate
+## 23. Card bonus candidate
 
 If a traded territory card represents a territory currently owned by the player, show a subtle candidate indicator such as `+2 MÖGLICH`.
 
 When multiple candidates exist, trade preview lists choices and exactly one may be selected.
 
-## 19. Card selection
+## 24. Card selection
 
 Selected card:
 
@@ -247,7 +366,9 @@ Reduced Motion removes/reduces elevation/scale and keeps border state.
 
 Invalid set is explained in preview; do not flood all cards red.
 
-## 20. Trade preview
+R8 may use direct drag-to-trade slots as the primary mouse interaction, but must retain keyboard/focus parity.
+
+## 25. Trade preview
 
 Preview must distinguish free and bound reinforcement.
 
@@ -259,7 +380,7 @@ Example:
 
 Do not misleadingly present `+12` as if all 12 were free placement.
 
-## 21. Card back/privacy
+## 26. Card back/privacy
 
 One identical card back for all cards:
 
@@ -269,13 +390,13 @@ One identical card back for all cards:
 
 AI/remote hands are represented only by count in player panel. Opponent trade presentation uses identical backs/public trade value; never reveal card identities.
 
-## 22. Card draw
+## 27. Card draw
 
 Human draw: card back moves/reveals to front and enters hand; ~600–900 ms normal, ~400–600 ms fast.
 
 AI/remote draw: back-only public presentation, count increases; no front reveal.
 
-## 23. Large hand behavior
+## 28. Large hand behavior
 
 - 1–5: readable fan.
 - 6–8: stronger overlap, horizontal navigation allowed.
@@ -286,11 +407,11 @@ Selected cards remain summarized in trade preview even when off-screen.
 
 Keyboard: left/right focus, Space select/deselect, Tab through preview/bonus/primary action.
 
-## 24. Card privacy on reconnect
+## 29. Card privacy on reconnect
 
 Unknown/private data defaults hidden before rendering. A reconnecting client must never briefly display opponent card fronts before applying filtering.
 
-## 25. Shared material language
+## 30. Shared material language
 
 Pieces, dice and cards share:
 
@@ -302,13 +423,13 @@ Pieces, dice and cards share:
 
 They must not look as if they came from unrelated asset packs.
 
-## 26. Reduced motion/audio parity
+## 31. Reduced motion/audio parity
 
 All object state information remains understandable with Reduced Motion and with SFX disabled.
 
-Dice still visibly roll; pieces/cards use simpler fades/state changes where needed.
+Dice still visibly roll; direct-manipulation source/target semantics remain explicit; pieces/cards use simpler fades/state changes where needed.
 
-## 27. Object QA fixtures
+## 32. Object QA fixtures
 
 ### Pieces
 
@@ -322,6 +443,10 @@ Dice still visibly roll; pieces/cards use simpler fades/state changes where need
 - DICE-B: 3v2
 - DICE-C: tie + mixed losses
 - DICE-D: 30 FPS + forced settle
+- DICE-E: weak ~40% throw across board
+- DICE-F: strong ~110% throw with table-edge bounce
+- DICE-G: dice pass through piece footprints without moving pieces
+- DICE-H: gesture invariance — same authoritative result remains independent of throw force/path
 
 ### Cards
 
