@@ -1,6 +1,6 @@
 # ATLAS FRONT — Redesign Implementation Roadmap
 
-Status: **sequence frozen; execution not started by this documentation commit**
+Status: **sequence frozen; later direct-manipulation amendment integrated**
 
 The redesign must be implemented in small deterministic milestones. Do not ask Codex or any implementation agent to “redesign the whole game” in one task.
 
@@ -18,6 +18,10 @@ Each milestone must preserve authoritative game rules unless the milestone expli
 8. Prefer adding/replacing presentation behind explicit interfaces over large cross-cutting rewrites.
 9. Keep singleplayer playable while presentation is rebuilt.
 10. Multiplayer expansion waits until the singleplayer end-to-end presentation is stable.
+11. For R6/R7, board-first mouse direct manipulation is the primary interaction model; it must translate into existing authoritative command paths rather than create a parallel rule engine.
+12. Pointer gestures may affect presentation only. They must never alter RNG probabilities, combat rules or network authority.
+
+Canonical direct-manipulation details are frozen in `13_DIRECT_MANIPULATION_AND_DICE_INTERACTION.md`.
 
 ---
 
@@ -142,6 +146,7 @@ Implement:
 - army numbers 1–9999 and compact >9999;
 - S/M/L/XL subtle tiers;
 - hover/selected/reinforce/loss/conquest states;
+- attack-source emphasis hook stronger than ordinary hover;
 - input hit area independent of visual size;
 - no dice physics collision.
 
@@ -150,7 +155,8 @@ Acceptance:
 - PIECE-A/B/C fixtures;
 - Europe remains readable;
 - grayscale/player-symbol test;
-- 720p clickability.
+- 720p clickability;
+- piece presentation can expose a distinct attack-source state without obscuring count/label.
 
 ---
 
@@ -177,60 +183,123 @@ Acceptance:
 - no old debug fields remain in normal UI;
 - 5-player 720p fixture passes.
 
+The ActionPanel is contextual explanation/fallback/commit UI. R6 makes the board itself the primary action surface.
+
 ---
 
-# R6 — Human UX-state machine end-to-end
+# R6 — Human direct-manipulation UX state machine end-to-end
 
-Goal: implement the frozen visible decision flow for one human player without changing rules.
+Goal: implement the frozen visible decision flow for one human player using the board as the primary mouse interaction surface without changing rules.
+
+Architecture:
+
+`Pointer Gesture → UX Intent → authoritative legal-command validation → existing Domain Command`
+
+R6 must not introduce a second legality/rule engine.
 
 Implement/refactor presentation for:
 
 - turn start;
 - card phase routing;
-- reinforcement preview/reset/confirm;
+- reinforcement reversible plan/reset/atomic confirm;
+- direct board placement/selection of reinforcement intent;
+- contextual mouse-wheel amount routing;
 - attack idle/source/target;
-- defense decision;
-- conquest movement;
+- grab/drag attack source using a presentation-only command ghost;
+- strong source-territory emphasis while attack intent is active;
+- legal-target-only drop affordance;
+- valid drop arms source→target attack intent;
+- attacker dice-count wheel routing and temporary non-physical commit fallback until R7;
+- human defense decision routing and legal defender-dice selection;
+- conquest movement source/target/amount;
+- direct source→conquered-target amount interaction;
 - end attack;
 - fortification source/target/amount/skip;
+- direct drag to connected owned target;
 - zero-choice auto-advance;
-- ESC/back hierarchy;
+- ESC/back/cancel hierarchy including active drags;
 - busy/commit locking;
-- canonical player-facing copy.
+- canonical player-facing copy;
+- click/keyboard accessibility fallbacks.
+
+Direct-manipulation contracts:
+
+- authoritative piece never moves during an uncommitted drag;
+- command ghost follows pointer;
+- only authoritative legal targets accept drops;
+- illegal drops mutate no GameState;
+- wheel amount/dice selection exposes only authoritative legal values;
+- consumed wheel input does not also zoom the board;
+- source remains visually unambiguous throughout target selection and subsequent combat presentation;
+- ordinary in-match interaction should be completable primarily with mouse buttons + wheel;
+- keyboard remains optional/fallback except for text entry.
+
+R6 does **not** implement final physical dice physics; it prepares the combat intent and interaction hooks for R7.
 
 Acceptance:
 
 - complete human turn requires no debug panel knowledge;
+- reinforcement, attack, conquest and fortification use board-first interaction rather than button-wall interaction;
+- attack can be armed by dragging an eligible source to a legal enemy target;
+- illegal drop causes no state mutation;
+- source is always obvious while attack is armed;
+- wheel amount/dice routing never exposes illegal values and never double-triggers map zoom;
+- click/keyboard equivalent path remains available;
 - no fake choices;
 - timeout entry points remain compatible with frozen policy;
-- input spam does not produce duplicate actions.
+- input spam does not produce duplicate actions;
+- a normal human turn can be performed with pointer + wheel, excluding text entry.
 
 ---
 
-# R7 — Dice and combat presentation
+# R7 — Full-table dice and combat presentation
 
-Goal: make combat physically readable on the board.
+Goal: make combat physically readable and tactile on the command table while preserving authoritative outcomes.
 
 Implement:
 
-- attacker/defender dice selectors;
-- authoritative result handoff;
-- physical/hybrid dice roll;
-- collision with board/dice only;
-- deterministic natural settle;
-- 2.5 s hard presentation timeout;
+- attacker/defender dice-count interaction attached to R6 intents;
+- mouse-wheel legal dice-count selection;
+- click-hold dice grab;
+- forgiving coarse stirring/sling throw gesture;
+- gesture analysis using coarse distance/speed/release-direction data rather than pixel-perfect recognition;
+- normalized presentation-force mapping clamped to **40%–110%**;
+- authoritative result handoff before presentation settles;
+- full command-table / board as the dice physics presentation space;
+- true-3D or convincing fake-3D/2.5D dice space consistent with table perspective;
+- collisions with table floor/safety edge/other dice only;
+- explicitly no physics collision with army pieces, labels, ownership, routes, HUD or tooltips;
+- strong throws may travel farther, bounce from table edges and settle later;
+- dice may roll visually across the world map and through piece footprints without moving pieces;
+- deterministic natural-looking settle to precomputed faces;
+- approximately 2.5 s hard presentation timeout;
 - Normal/Fast timing;
 - pair comparison overlay;
 - before→after army counts;
 - repeat-attack flow;
-- Reduced Motion compatibility.
+- Reduced Motion compatibility;
+- default-strength fallback throw for users who do not perform the gesture.
+
+Critical authority contract:
+
+`throw release → authoritative RNG/result fixed → gesture mapped to force/direction/spin presentation only → roll → controlled settle`
+
+Throw gesture must never influence result probabilities.
+
+V1 uses free throwing across the command table/game board. Dice cup, game-box/tray or other cosmetic throw surfaces are explicitly post-V1 and must not delay R7.
 
 Acceptance:
 
-- DICE-A/B/C/D;
+- DICE-A/B/C/D existing fixtures;
+- weak ~40% throw fixture;
+- strong ~110% throw fixture with table-edge bounce;
+- dice-cross-piece-footprint fixture proving no piece displacement;
+- gesture-invariance fixture proving same authoritative result semantics independent of force/path;
 - 30 FPS fixture;
 - AI 4× lower-bound visibility;
-- no reroll or physics-authority bug.
+- dice never leave simulated table space;
+- no reroll or physics-authority bug;
+- no obvious post-stop face correction.
 
 ---
 
@@ -251,6 +320,8 @@ Implement:
 - opponent back-only presentation;
 - keyboard navigation;
 - reconnect privacy-safe defaults.
+
+Mouse-primary card interaction may use direct drag-to-trade slots, but keyboard/focus parity remains mandatory.
 
 Acceptance:
 
@@ -273,6 +344,8 @@ Implement:
 - 1×/2×/4× timing behavior;
 - human defense interrupt during AI turn;
 - no fake cursor/no heuristic display.
+
+AI does not need to fake human drag gestures. It uses the same semantic source/target/presentation states while the decision source remains AI.
 
 Acceptance:
 
@@ -322,6 +395,8 @@ Implement:
 - Reduced Motion;
 - tutorial/help reset;
 - keyboard focus across menus/settings/cards/dialogs;
+- keyboard/click equivalents for direct-manipulation actions;
+- pointer/gesture fallback to default-strength dice throw;
 - responsive compact modes.
 
 Acceptance:
@@ -329,6 +404,8 @@ Acceptance:
 - all supported resolutions/UI scales;
 - grayscale check;
 - Audio Off / Reduced Motion full-playability;
+- direct-manipulation semantic information remains available without relying on motion alone;
+- keyboard/focus fallback covers the same authoritative gameplay decisions;
 - display confirm auto-revert.
 
 ---
@@ -353,6 +430,8 @@ Implement/refactor presentation for:
 - eliminated spectator mode;
 - host-loss terminal screen;
 - post-match return-to-lobby/rematch.
+
+Direct manipulation remains local presentation/intent input. Network authority and command validation remain unchanged.
 
 Acceptance:
 
@@ -393,6 +472,11 @@ Automate or make reproducible:
 
 - map fixtures;
 - pieces/dice/cards fixtures;
+- direct-manipulation source/target fixtures;
+- illegal-drop/no-state-change fixture;
+- wheel-routing/no-double-zoom fixture;
+- weak/strong full-table dice throws;
+- dice-through-piece-footprint fixture;
 - 1080p/900p/720p/ultrawide captures;
 - Reduced Motion/grayscale variants where practical;
 - AI 4×;
@@ -417,6 +501,7 @@ Tasks:
 - Windows startup smoke;
 - long-session playtest;
 - final screenshot/capture review;
+- direct-manipulation end-to-end playtest with mouse-first path;
 - release checklist update.
 
 Do not use R15 to introduce major new product features.
