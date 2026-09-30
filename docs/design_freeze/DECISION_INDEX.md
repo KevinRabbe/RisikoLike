@@ -2,6 +2,8 @@
 
 This index maps the long-form design discussion ranges to the canonical frozen documents. It is not a verbatim chat transcript. Earlier ideas that were superseded are intentionally normalized to the final decision.
 
+Later explicit amendments are listed after the original D-range freeze and supersede only the interaction/presentation wording they explicitly replace; authoritative game rules remain unchanged.
+
 ## D1–D365 — Product, rules, UX foundation
 
 Canonical destinations:
@@ -261,10 +263,58 @@ Covered topics include:
 - acceptance fixtures;
 - R0–R15 milestone sequence.
 
+## Post-freeze amendment A1 — Board-first direct manipulation
+
+Canonical destinations:
+
+- `02_UX_STATE_MACHINE_AND_COPY.md`
+- `10_IMPLEMENTATION_ROADMAP.md`
+- `13_DIRECT_MANIPULATION_AND_DICE_INTERACTION.md`
+
+This explicit amendment replaces earlier button-first wording where necessary while preserving all authoritative rules.
+
+Frozen decisions:
+
+- the board is the primary gameplay input surface;
+- ordinary in-match play is mouse-first and should be completable primarily with pointer buttons + mouse wheel;
+- pointer gestures become UX intents and are still validated by the existing authoritative command path;
+- command ghosts are presentation-only; authoritative pieces do not move during uncommitted drag;
+- only legal targets accept drops;
+- illegal drops mutate no GameState;
+- attack source receives stronger emphasis than ordinary hover/selection and remains explicit through combat presentation;
+- attack source→target can be armed by dragging a source command piece/ghost to a legal adjacent enemy territory;
+- reinforcement, conquest movement and Verschiebung use contextual board-first amount interaction;
+- mouse wheel selects legal amounts/dice values when context owns the wheel and must not simultaneously zoom the board;
+- click/keyboard equivalents remain accessibility/fallback paths.
+
+## Post-freeze amendment A2 — Full-table gesture dice
+
+Canonical destinations:
+
+- `05_PIECES_DICE_CARDS.md`
+- `10_IMPLEMENTATION_ROADMAP.md`
+- `13_DIRECT_MANIPULATION_AND_DICE_INTERACTION.md`
+
+Frozen decisions:
+
+- attacker/defender dice count is primarily selected with the mouse wheel;
+- V1 throw gesture is `LMB hold → coarse stirring/sling movement → release`;
+- no pixel-perfect circle recognition or gesture minigame;
+- gesture intensity is clamped to a **40%–110%** presentation-force range;
+- gesture changes direction/force/spin/travel only, never RNG probabilities or combat outcome;
+- dice may roll freely across the visible command table and world map;
+- dice collide with table floor/safety edges and other dice;
+- dice do not collide with army pieces, labels, ownership masks, routes, tooltips or HUD;
+- strong throws may bounce from table edges and settle later but cannot leave the simulated table space;
+- true 3D and convincing fake-3D/2.5D implementations are both acceptable if the visible contract is met;
+- predetermined natural-looking settle remains mandatory with an approximately 2.5 s hard presentation timeout;
+- V1 has one presentation surface: free throw across the board/table;
+- dice cup and game-box/tray alternatives are deferred cosmetic post-V1 ideas and must not affect authoritative combat.
+
 ## Freeze result
 
 Current consolidated state:
 
-**DESIGN FROZEN.**
+**DESIGN FROZEN, WITH A1/A2 DIRECT-MANIPULATION AMENDMENTS.**
 
-Remaining uncertainty is implementation validation only: exact visual calibration in the running game, font rendering/package validation, final generated/produced environment/geography quality, and the exact rendering technique used for physical dice/pieces where multiple equivalent technical approaches can satisfy the frozen behavior.
+Remaining uncertainty is implementation validation only: exact visual calibration in the running game, font rendering/package validation, final generated/produced environment/geography quality, the exact rendering technique used for physical dice/pieces where multiple equivalent technical approaches can satisfy the frozen behavior, and runtime tuning of the 40–110% gesture-to-presentation mapping without changing its authority contract.
