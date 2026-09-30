@@ -1,6 +1,6 @@
 # ATLAS FRONT — UX State Machine and Player-facing Copy
 
-Status: **PASS / frozen**
+Status: **PASS / frozen; direct-manipulation amendment integrated**
 
 ## 1. Architecture
 
@@ -12,19 +12,31 @@ Separate three layers:
 
 Human, AI and remote-human turns use the same visible semantic flow; only the decision source differs.
 
+The board is the primary interaction surface. Pointer gestures are translated through:
+
+`Pointer Gesture → UX Intent → authoritative legal-command validation → existing Domain Command`
+
+Direct manipulation never becomes a second rule engine.
+
 ## 2. Global interaction rules
 
 - Hover territory → tooltip + subtle border.
-- Click legal territory → select.
-- Click same source → deselect.
-- Click another legal source → switch source.
-- Illegal input never changes game state; show brief contextual reason.
+- Direct manipulation is primary: grab/drag on the board where the current UX state supports it.
+- Click source/target remains a supported fallback where practical.
+- Legal destinations are exposed spatially; illegal destinations never commit state.
+- Drag uses a presentation-only command ghost. The authoritative piece does not move before commit.
+- Click same source → deselect where the current reversible substate permits it.
+- Click another legal source → switch source where the current reversible substate permits it.
+- Illegal input never changes game state; show a brief contextual reason only when useful.
 - `ESC` aborts current reversible substate before closing larger surfaces.
-- Mouse wheel zooms board except when pointer is over an amount selector, where it adjusts the value.
-- Drag/MMB pans board.
+- Mouse wheel zooms board except when pointer focus is over an active amount/dice interaction; there it adjusts that value and does not also zoom.
+- Drag/MMB pans board when no direct-manipulation gesture owns the pointer.
 - Reset View is available as a small utility.
 - Enter/Space may activate the unambiguous focused primary action.
 - No misclick ends a phase.
+- Ordinary in-match play should be completable primarily with mouse buttons + wheel. Keyboard remains optional/fallback except for text entry such as names.
+
+Detailed direct-manipulation and dice-gesture contracts are frozen in `13_DIRECT_MANIPULATION_AND_DICE_INTERACTION.md`.
 
 ## 3. High-level flow
 
@@ -54,6 +66,8 @@ Permanent match UI contains:
 - bottom contextual action panel.
 
 There is no permanent generic `ZUG BEENDEN` button.
+
+The ActionPanel explains context and provides explicit fallback/commit actions; it must not replace direct board interaction as the primary gameplay surface.
 
 ### Top command bar
 
@@ -100,23 +114,45 @@ Conceptual modes:
 
 ### Attack idle
 
-Instruction: **„Wähle ein eigenes Gebiet mit mindestens 2 Armeen.“**
+Primary instruction: **„Ziehe eine deiner Armeen auf ein angrenzendes feindliches Gebiet.“**
+
+Fallback instruction may additionally support: **„Wähle ein eigenes Gebiet mit mindestens 2 Armeen.“**
 
 Legal sources receive subtle non-pulsing affordance.
 
 Secondary action: `ANGRIFF BEENDEN`.
 
-### Source selected
+### Source grabbed / selected
 
-Instruction: **„Wähle ein angrenzendes feindliches Gebiet.“**
+When the player grabs/selects an eligible source:
 
-Legal enemy targets are highlighted. The source remains visually distinct.
+- source territory becomes clearly stronger than ordinary hover;
+- source piece/territory may use stronger outline, controlled glow and slight elevation/scale when Reduced Motion is off;
+- the source army count and territory label remain readable;
+- only legal adjacent enemy targets receive target affordance;
+- a command ghost follows pointer drag rather than moving the authoritative piece.
 
-### Target selected
+Instruction: **„Ziehe auf ein angrenzendes feindliches Gebiet.“**
 
-Show source → target, current army counts and legal attack dice `[1] [2] [3]` with illegal options disabled.
+Dropping on an illegal destination cancels the drag and changes no GameState.
 
-Primary: `WÜRFELN`.
+### Target armed
+
+A valid drop arms the attack and keeps both source and target visually explicit.
+
+Show source → target and current army counts.
+
+Representative context:
+
+`ANGRIFF · BRASILIEN → NORDAFRIKA`
+
+Attacker dice count is selected primarily with the mouse wheel while pointer focus is over the attack-dice interaction. Only legal values `[1] [2] [3]` are reachable. Click/keyboard alternatives remain available for accessibility/fallback input.
+
+Representative instruction:
+
+**„Mausrad: Würfel wählen · Würfel greifen und werfen.“**
+
+A permanent button-first `WÜRFELN` flow is not the primary V1 interaction. R6 may temporarily use an explicit commit fallback until the physical R7 throw is integrated, but implementation must preserve the direct-manipulation intent.
 
 ### Human defense
 
@@ -124,11 +160,15 @@ When attacked, lower-priority overlays yield to the defense decision.
 
 Instruction: **„{player} greift dein Gebiet {territory} an. Wähle deine Verteidigungswürfel.“**
 
-Primary: `VERTEIDIGEN`.
+Legal defender dice count is selected primarily with the mouse wheel; click/keyboard alternatives remain available. The physical throw uses the same forgiving gesture vocabulary as attacker dice once R7 is integrated.
+
+Primary/fallback action may remain `VERTEIDIGEN` where required for accessibility or interim R6 wiring.
 
 ### Rolling/result
 
 State-changing input is disabled during committed roll presentation.
+
+The throw gesture affects presentation only; it never changes authoritative RNG or combat probabilities.
 
 Result shows attacker dice, defender dice, pairwise comparison and army counts before→after. Unpaired dice are visually dimmed.
 
@@ -138,11 +178,17 @@ Tie copy is explicit: **„VERTEIDIGER GEWINNT“**.
 
 Banner: `GEBIET EROBERT` + territory.
 
-Then mandatory movement interaction. If minimum equals maximum, show the required value and only `BESTÄTIGEN`.
+The source and conquered target remain explicit. Amount interaction should stay board-first and may use mouse wheel within the legal movement range.
+
+If minimum equals maximum, show the required value and only `BESTÄTIGEN`.
 
 ## 7. Reinforcement UX
 
+Primary interaction is direct board placement while preserving the existing reversible-plan / atomic-confirm contract.
+
 Instruction at idle: **„Wähle eines deiner Gebiete.“**
+
+A selected/dragged reinforcement intent may be placed only on owned territories. Mouse wheel is the preferred in-context amount control; button/keyboard amount controls remain fallbacks.
 
 Selected territory shows:
 
@@ -151,7 +197,7 @@ Selected territory shows:
 - resulting armies;
 - remaining reinforcement pool.
 
-Amount selector supports `−`, `+`, `+1`, `+5`, `+10`, `ALLE`, hold repeat and mouse wheel.
+Fallback amount selector supports `−`, `+`, `+1`, `+5`, `+10`, `ALLE`, hold repeat and mouse wheel.
 
 When pool reaches 0:
 
@@ -166,9 +212,11 @@ Player-facing term is always **„Verschiebung“**, never “Fortification”.
 
 Instruction: **„Du kannst einmal Armeen zwischen verbundenen eigenen Gebieten verschieben.“**
 
-Flow:
+Primary interaction:
 
-source → connected owned target → amount → preview → `VERSCHIEBEN`.
+source grab/select → only connected owned targets react → drag/drop valid target → mouse-wheel amount → preview → `VERSCHIEBEN`.
+
+The command ghost does not move authoritative state before commit. Illegal targets reject the drop without state mutation.
 
 Secondary at idle: `ÜBERSPRINGEN`.
 
@@ -186,7 +234,7 @@ Forced mode cannot be escaped.
 
 Cards remain readable; large hands scroll horizontally instead of shrinking indefinitely.
 
-Trade preview clearly separates free armies from territory-bound +2 bonus.
+Trade preview clearly separates free and territory-bound reinforcement.
 
 Example:
 
@@ -194,6 +242,8 @@ Example:
 `+2 auf Brasilien`
 
 Forced header: `KARTENTAUSCH ERFORDERLICH`.
+
+Direct card manipulation may later use drag-to-trade slots, but R8 must preserve keyboard/focus parity and privacy rules.
 
 ## 10. Overlay/modal priority
 
@@ -216,7 +266,7 @@ Only one blocking modal exists at a time.
 
 In match:
 
-1. cancel reversible local selection/substate;
+1. cancel reversible local selection/drag/substate;
 2. close current overlay/drawer when allowed;
 3. open pause/menu.
 
@@ -233,7 +283,9 @@ Seen only after `VERSTANDEN`.
 Canonical concepts:
 
 - reinforcement;
-- attack source/target;
+- attack source/target drag;
+- mouse-wheel amount/dice selection;
+- dice throw gesture;
 - dice comparison;
 - conquest;
 - cards;
@@ -300,23 +352,27 @@ No gratuitous exclamation marks.
 ### Attack
 
 - `ANGRIFF`
-- „Wähle ein eigenes Gebiet mit mindestens 2 Armeen.“
-- „Wähle ein angrenzendes feindliches Gebiet.“
+- „Ziehe eine deiner Armeen auf ein angrenzendes feindliches Gebiet.“
+- „Wähle ein eigenes Gebiet mit mindestens 2 Armeen.“ — fallback/select mode
+- „Ziehe auf ein angrenzendes feindliches Gebiet.“
+- „Mausrad: Würfel wählen · Würfel greifen und werfen.“
 - „Für einen Angriff müssen mindestens 2 Armeen im Ausgangsgebiet stehen.“
 - „Von diesem Gebiet aus ist aktuell kein Angriff möglich.“
 - „Wähle ein feindliches Gebiet.“
 - „Dieses Gebiet grenzt nicht an dein Ausgangsgebiet.“
-- `WÜRFELN`
 - `NOCHMAL ANGREIFEN`
 - `ANDERES ZIEL`
 - `ANDERES AUSGANGSGEBIET`
 - `ANGRIFF BEENDEN`
 
+`WÜRFELN` may exist as an accessibility/fallback action but is not the primary mouse-first interaction.
+
 ### Defense
 
 - `VERTEIDIGUNG`
 - „Wähle deine Verteidigungswürfel.“
-- `VERTEIDIGEN`
+- „Mausrad: Würfel wählen · Würfel greifen und werfen.“
+- `VERTEIDIGEN` — accessibility/interim fallback
 - timeout banner: `VERTEIDIGUNG AUTOMATISCH`
 
 ### Conquest
@@ -330,7 +386,7 @@ No gratuitous exclamation marks.
 
 - `VERSCHIEBUNG`
 - „Wähle das Gebiet, von dem du Armeen verschieben möchtest.“
-- „Wähle ein verbundenes eigenes Zielgebiet.“
+- „Ziehe die Armeen auf ein verbundenes eigenes Zielgebiet.“
 - „Zwischen diesen Gebieten besteht keine zusammenhängende eigene Verbindung.“
 - `VERSCHIEBEN`
 - `ÜBERSPRINGEN`
@@ -426,3 +482,16 @@ Normal UI must not expose:
 - stack traces.
 
 Developer overlay is explicitly exempt.
+
+## 21. Direct-manipulation acceptance
+
+The direct-manipulation amendment is accepted only if:
+
+- source territory remains unambiguous during drag and armed states;
+- only authoritative legal destinations accept a drop;
+- illegal drops mutate no state;
+- wheel-based amount/dice selection exposes only legal values;
+- wheel consumption does not also zoom the board;
+- normal in-match interaction can be performed primarily with mouse buttons + wheel;
+- click/keyboard equivalents remain available for accessibility/fallback use;
+- no input gesture changes authoritative RNG or game rules.
